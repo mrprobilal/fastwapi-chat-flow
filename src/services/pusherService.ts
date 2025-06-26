@@ -11,8 +11,7 @@ class PusherService {
     }
 
     this.pusher = new Pusher(pusherKey, {
-      cluster: cluster,
-      encrypted: true
+      cluster: cluster
     });
 
     this.channel = this.pusher.subscribe('fastwapi-channel');
