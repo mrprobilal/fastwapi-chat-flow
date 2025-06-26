@@ -10,6 +10,7 @@ const Settings = () => {
     businessId: '',
     phoneNumberId: '',
     webhookUrl: '',
+    pusherAppId: '2012752',
     pusherKey: '490510485d3b7c3874d4',
     pusherSecret: 'bdafa26e3b3d42f53d5c',
     pusherCluster: 'ap4',
@@ -133,7 +134,18 @@ const Settings = () => {
                 Test Connection
               </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Pusher App ID</label>
+                <input
+                  type="text"
+                  name="pusherAppId"
+                  value={settings.pusherAppId}
+                  onChange={handleInputChange}
+                  placeholder="Pusher app ID"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Key</label>
                 <input
@@ -226,7 +238,17 @@ channel.bind('message-event', function(data) {
           
           <p><strong>2. Send messages from your website to this app:</strong></p>
           <pre className="bg-blue-100 p-3 rounded text-xs overflow-x-auto">
-{`// Trigger event from your backend
+{`// Backend code to trigger events (Node.js)
+const Pusher = require('pusher');
+
+const pusher = new Pusher({
+  appId: '${settings.pusherAppId}',
+  key: '${settings.pusherKey}',
+  secret: '${settings.pusherSecret}',
+  cluster: '${settings.pusherCluster}',
+  useTLS: true
+});
+
 pusher.trigger('fastwapi-channel', 'message-event', {
   message: 'Hello from website',
   sender: 'customer',
