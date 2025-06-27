@@ -1,4 +1,3 @@
-
 import { toast } from 'sonner';
 import { databaseService } from './databaseService';
 
@@ -153,10 +152,10 @@ class FastWAPIService {
     console.log('📋 Getting templates from FastWAPI...');
 
     try {
+      // Use GET method instead of POST as the API expects GET
       const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getTemplates`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({})
+        method: 'GET',
+        headers: this.getHeaders()
       });
 
       if (!response.ok) {
@@ -189,19 +188,37 @@ class FastWAPIService {
     console.log('📤 Sending template via FastWAPI:', { phone, templateName, variables });
 
     try {
-      const response = await fetch(`${this.getBaseUrl()}/api/wpbox/sendTemplate`, {
+      // Try the correct template sending endpoint
+      const response = await fetch(`${this.getBaseUrl()}/api/wpbox/sendTemplateMessage`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
           phone: phone,
-          template: templateName,
+          template_name: templateName,
           variables: variables
         })
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`HTTP ${response.status}: ${errorData.message || response.statusText}`);
+        // If that doesn't work, try alternative endpoint
+        const altResponse = await fetch(`${this.getBaseUrl()}/api/wpbox/template/send`, {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({
+            phone: phone,
+            template: templateName,
+            parameters: variables
+          })
+        });
+
+        if (!altResponse.ok) {
+          const errorData = await altResponse.json();
+          throw new Error(`HTTP ${altResponse.status}: ${errorData.message || altResponse.statusText}`);
+        }
+
+        const result = await altResponse.json();
+        console.log('✅ Template sent via FastWAPI (alternative endpoint):', result);
+        return result;
       }
 
       const result = await response.json();
