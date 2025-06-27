@@ -1,9 +1,12 @@
 
 import React from 'react';
 import { Users, MessageSquare, Send, BarChart3 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+
   const stats = [
     {
       title: 'Total Customers',
@@ -79,16 +82,28 @@ const Dashboard = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
           <div className="space-y-3">
-            <button className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium">
+            <button 
+              onClick={() => navigate('/templates')}
+              className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+            >
               Send Template Message
             </button>
-            <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+            <button 
+              onClick={() => navigate('/customers')}
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
               Add New Customer
             </button>
-            <button className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium">
+            <button 
+              onClick={() => navigate('/messages')}
+              className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+            >
               View Analytics
             </button>
-            <button className="w-full border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+            <button 
+              onClick={() => navigate('/settings')}
+              className="w-full border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+            >
               API Settings
             </button>
           </div>
