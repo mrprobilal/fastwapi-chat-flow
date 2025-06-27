@@ -139,55 +139,144 @@ class PusherService {
   }
 
   subscribeToMessages(callback: (data: any) => void) {
-    console.log('📨 Setting up comprehensive message subscription...');
+    console.log('📨 Setting up COMPREHENSIVE webhook message subscription...');
     this.messageCallback = callback;
     
     if (this.channel) {
-      // Comprehensive list of event types matching fastwapi patterns
+      // COMPREHENSIVE list of ALL possible WhatsApp webhook event names
       const eventTypes = [
-        // Primary fastwapi events
-        'message-event',
-        'webhook-message',
-        'whatsapp-message',
+        // Standard WhatsApp webhook events
+        'messages',
+        'messages.received',
+        'message.received',
+        'message_received',
+        'incoming_message',
         'incoming-message',
-        
-        // WhatsApp webhook formats
-        'whatsapp-webhook',
-        'webhook',
-        'message',
+        'new_message',
         'new-message',
+        'whatsapp_message',
+        'whatsapp-message',
+        'whatsapp.message',
         
-        // Generic patterns
+        // Generic webhook events
+        'webhook',
+        'webhook_data',
+        'webhook-data',
+        'webhook.data',
+        'webhook_received',
+        'webhook-received',
+        'webhook.received',
+        
+        // Cloud API events
+        'cloud_api',
+        'cloud-api',
+        'cloud.api',
+        'cloud_api_webhook',
+        'cloud-api-webhook',
+        'cloud.api.webhook',
+        
+        // Meta/Facebook events
+        'meta_webhook',
+        'meta-webhook',
+        'meta.webhook',
+        'facebook_webhook',
+        'facebook-webhook',
+        'facebook.webhook',
+        
+        // FastWAPI specific events
+        'fastwapi',
+        'fastwapi_message',
+        'fastwapi-message',
+        'fastwapi.message',
+        'fastwapi_webhook',
+        'fastwapi-webhook',
+        'fastwapi.webhook',
+        
+        // Generic message events
+        'message',
+        'message_event',
+        'message-event',
+        'message.event',
+        'msg',
+        'msg_received',
+        'msg-received',
+        'msg.received',
+        
+        // Data events
         'data',
-        'event',
-        'payload'
+        'data_received',
+        'data-received',
+        'data.received',
+        'payload',
+        'event_data',
+        'event-data',
+        'event.data',
+        
+        // Notification events
+        'notification',
+        'notification_received',
+        'notification-received',
+        'notification.received',
+        
+        // Business API events
+        'business_message',
+        'business-message',
+        'business.message',
+        'wa_business_message',
+        'wa-business-message',
+        'wa.business.message'
       ];
 
+      let boundEvents = 0;
       eventTypes.forEach(eventType => {
-        this.channel.bind(eventType, (data: any) => {
-          console.log(`📨 ===== FASTWAPI MESSAGE RECEIVED =====`);
-          console.log(`📨 Event Type: ${eventType}`);
-          console.log(`📨 Raw Data:`, JSON.stringify(data, null, 2));
-          console.log(`📨 Timestamp:`, new Date().toISOString());
-          console.log(`📨 ====================================`);
-          
-          if (this.messageCallback) {
-            this.messageCallback(data);
-          }
-        });
-        console.log(`📨 Bound to fastwapi event: ${eventType}`);
+        try {
+          this.channel.bind(eventType, (data: any) => {
+            console.log(`🔥 ===== WEBHOOK EVENT RECEIVED =====`);
+            console.log(`🔥 Event Type: "${eventType}"`);
+            console.log(`🔥 Event Data:`, JSON.stringify(data, null, 2));
+            console.log(`🔥 Timestamp:`, new Date().toISOString());
+            console.log(`🔥 =================================`);
+            
+            if (this.messageCallback) {
+              this.messageCallback(data);
+            }
+          });
+          boundEvents++;
+          console.log(`📨 ✅ Bound to event: "${eventType}"`);
+        } catch (error) {
+          console.error(`📨 ❌ Failed to bind to event "${eventType}":`, error);
+        }
       });
       
-      console.log(`📨 Subscribed to ${eventTypes.length} fastwapi event types`);
+      console.log(`📨 🎯 Successfully bound to ${boundEvents}/${eventTypes.length} webhook event types`);
+      
+      // Also bind to catch-all events just in case
+      try {
+        this.channel.bind_global((eventName: string, data: any) => {
+          console.log(`🌐 GLOBAL EVENT CAUGHT: "${eventName}"`, data);
+          
+          // If it's not one of our known events, still try to process it
+          if (!eventTypes.includes(eventName)) {
+            console.log(`🆕 Unknown event type "${eventName}" - attempting to process anyway`);
+            if (this.messageCallback) {
+              this.messageCallback(data);
+            }
+          }
+        });
+        console.log(`📨 🌐 Global event catcher enabled`);
+      } catch (error) {
+        console.error('❌ Failed to set up global event catcher:', error);
+      }
+      
     } else {
-      console.warn('⚠️ Cannot subscribe - no fastwapi channel available');
+      console.warn('⚠️ Cannot subscribe - no channel available');
     }
   }
 
   unsubscribeFromMessages() {
     if (this.channel) {
       this.channel.unbind_all();
-      console.log('📨 Unsubscribed from all fastwapi message events');
+      console.log('📨 Unsubscribed from all message events');
     }
     this.messageCallback = null;
   }
