@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Save, TestTube, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -5,6 +6,7 @@ import { pusherService } from '../services/pusherService';
 import { whatsappService } from '../services/whatsappService';
 import { databaseService } from '../services/databaseService';
 import TestMessage from '../components/TestMessage';
+import { Input } from '../components/ui/input';
 
 const Settings = () => {
   const [settings, setSettings] = useState({
@@ -123,46 +125,46 @@ const Settings = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Access Token</label>
-              <input
-                type="password"
+              <Input
+                type="text"
                 name="accessToken"
                 value={settings.accessToken}
                 onChange={handleInputChange}
                 placeholder="WhatsApp Business API Access Token"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Business ID</label>
-              <input
+              <Input
                 type="text"
                 name="businessId"
                 value={settings.businessId}
                 onChange={handleInputChange}
                 placeholder="WhatsApp Business Account ID"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number ID</label>
-              <input
+              <Input
                 type="text"
                 name="phoneNumberId"
                 value={settings.phoneNumberId}
                 onChange={handleInputChange}
                 placeholder="WhatsApp Business Phone Number ID"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Webhook Verify Token</label>
-              <input
+              <Input
                 type="text"
                 name="webhookVerifyToken"
                 value={settings.webhookVerifyToken}
                 onChange={handleInputChange}
                 placeholder="Webhook verification token"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full"
               />
             </div>
           </div>
@@ -183,46 +185,46 @@ const Settings = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Pusher App ID</label>
-              <input
+              <Input
                 type="text"
                 name="pusherAppId"
                 value={settings.pusherAppId}
                 onChange={handleInputChange}
                 placeholder="Pusher app ID"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Key</label>
-              <input
+              <Input
                 type="text"
                 name="pusherKey"
                 value={settings.pusherKey}
                 onChange={handleInputChange}
                 placeholder="Pusher app key"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Secret</label>
-              <input
+              <Input
                 type="password"
                 name="pusherSecret"
                 value={settings.pusherSecret}
                 onChange={handleInputChange}
                 placeholder="Pusher app secret"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Cluster</label>
-              <input
+              <Input
                 type="text"
                 name="pusherCluster"
                 value={settings.pusherCluster}
                 onChange={handleInputChange}
                 placeholder="Pusher cluster"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full"
               />
             </div>
           </div>
