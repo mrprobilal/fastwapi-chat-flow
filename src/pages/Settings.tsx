@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle, Sync, Globe } from 'lucide-react';
+import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle, sync as Sync, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { pusherService } from '../services/pusherService';
 import { databaseService } from '../services/databaseService';
