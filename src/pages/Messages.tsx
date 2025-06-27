@@ -4,6 +4,7 @@ import { usePusher } from '../hooks/usePusher';
 import { toast } from 'sonner';
 import { useLocation } from 'react-router-dom';
 import { useIsMobile } from '../hooks/use-mobile';
+import { whatsappService } from '../services/whatsappService';
 
 const Messages = () => {
   const location = useLocation();
@@ -18,6 +19,32 @@ const Messages = () => {
   const { isConnected, subscribeToMessages, unsubscribeFromMessages } = usePusher();
 
   const [chats, setChats] = useState([]);
+
+  // Load templates from localStorage and check API status
+  useEffect(() => {
+    const loadTemplates = () => {
+      const savedTemplates = localStorage.getItem('whatsapp-templates');
+      if (savedTemplates) {
+        const parsedTemplates = JSON.parse(savedTemplates);
+        console.log('📋 Loaded templates for Messages:', parsedTemplates.length);
+        setTemplates(parsedTemplates);
+      }
+    };
+
+    const checkWhatsAppConnection = async () => {
+      setApiStatus(prev => ({ ...prev, checking: true }));
+      try {
+        await whatsappService.testConnection();
+        setApiStatus({ checking: false, connected: true });
+      } catch (error) {
+        console.error('WhatsApp API connection failed:', error);
+        setApiStatus({ checking: false, connected: false });
+      }
+    };
+
+    loadTemplates();
+    checkWhatsAppConnection();
+  }, []);
 
   // Helper function to normalize phone numbers
   const normalizePhoneNumber = (phone) => {
@@ -216,7 +243,7 @@ const Messages = () => {
     };
   }, [isConnected, subscribeToMessages, unsubscribeFromMessages, selectedChat, addOrUpdateChat]);
 
-  // Simplified message sending
+  // Enhanced message sending with WhatsApp API
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;
 
@@ -227,7 +254,7 @@ const Messages = () => {
       text: newMessage,
       timestamp: new Date().toISOString(),
       type: 'sent',
-      status: 'sent'
+      status: 'sending'
     };
 
     console.log('📤 Sending message:', messageData);
@@ -238,22 +265,64 @@ const Messages = () => {
       return updated;
     });
 
+    const messageText = newMessage;
+    setNewMessage('');
+
+    try {
+      // Send via WhatsApp API if connected
+      if (apiStatus.connected) {
+        await whatsappService.sendMessage(selectedChat, messageText);
+        
+        // Update message status to sent
+        setMessages(prev => {
+          const updated = prev.map(msg => 
+            msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
+          );
+          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+          return updated;
+        });
+        
+        toast.success('Message sent via WhatsApp!');
+      } else {
+        // Update message status to sent (local only)
+        setMessages(prev => {
+          const updated = prev.map(msg => 
+            msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
+          );
+          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+          return updated;
+        });
+        
+        toast.success('Message saved locally (WhatsApp API not connected)');
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      
+      // Update message status to failed
+      setMessages(prev => {
+        const updated = prev.map(msg => 
+          msg.id === messageData.id ? { ...msg, status: 'failed' } : msg
+        );
+        localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+        return updated;
+      });
+      
+      toast.error(`Failed to send message: ${error.message}`);
+    }
+
     // Update chat with last message
     setChats(prev => {
       const updated = prev.map(chat => 
         chat.id === selectedChat 
-          ? { ...chat, lastMessage: newMessage, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+          ? { ...chat, lastMessage: messageText, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
           : chat
       );
       localStorage.setItem('whatsapp-chats', JSON.stringify(updated));
       return updated;
     });
-
-    setNewMessage('');
-    toast.success('Message sent! (Will be processed by your FastWAPI backend)');
   };
 
-  const sendTemplate = (template) => {
+  const sendTemplate = async (template) => {
     if (!selectedChat) return;
 
     const messageData = {
@@ -263,8 +332,10 @@ const Messages = () => {
       text: template.content,
       timestamp: new Date().toISOString(),
       type: 'sent',
-      status: 'sent'
+      status: 'sending'
     };
+
+    console.log('📤 Sending template:', template.name);
 
     setMessages(prev => {
       const updated = [...prev, messageData];
@@ -272,8 +343,49 @@ const Messages = () => {
       return updated;
     });
 
+    try {
+      // Send via WhatsApp API if connected
+      if (apiStatus.connected) {
+        await whatsappService.sendTemplateMessage(template.name, selectedChat);
+        
+        // Update message status to sent
+        setMessages(prev => {
+          const updated = prev.map(msg => 
+            msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
+          );
+          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+          return updated;
+        });
+        
+        toast.success(`Template "${template.name}" sent via WhatsApp!`);
+      } else {
+        // Update message status to sent (local only)
+        setMessages(prev => {
+          const updated = prev.map(msg => 
+            msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
+          );
+          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+          return updated;
+        });
+        
+        toast.success('Template saved locally (WhatsApp API not connected)');
+      }
+    } catch (error) {
+      console.error('Failed to send template:', error);
+      
+      // Update message status to failed
+      setMessages(prev => {
+        const updated = prev.map(msg => 
+          msg.id === messageData.id ? { ...msg, status: 'failed' } : msg
+        );
+        localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+        return updated;
+      });
+      
+      toast.error(`Failed to send template: ${error.message}`);
+    }
+
     setShowTemplates(false);
-    toast.success('Template sent!');
   };
 
   const getSelectedChat = () => chats.find(chat => chat.id === selectedChat);
@@ -372,7 +484,7 @@ const Messages = () => {
           <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
             {showTemplates && templates.length > 0 && (
               <div className="mb-4 p-3 bg-gray-50 rounded-lg border max-h-40 overflow-y-auto">
-                <h4 className="text-sm font-medium text-gray-900 mb-2">Templates</h4>
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Templates ({templates.length})</h4>
                 <div className="space-y-2">
                   {templates.map((template) => (
                     <button
@@ -390,8 +502,11 @@ const Messages = () => {
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setShowTemplates(!showTemplates)}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                className={`p-2 hover:bg-gray-100 rounded-full transition-colors ${
+                  templates.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:text-gray-700'
+                }`}
                 disabled={templates.length === 0}
+                title={templates.length === 0 ? 'No templates available. Sync templates first.' : 'Show templates'}
               >
                 <FileText className="h-5 w-5" />
               </button>
@@ -519,7 +634,7 @@ const Messages = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-gray-900">Messages</h1>
-            <p className="text-sm text-gray-600 hidden md:block">Real-time messaging via Pusher</p>
+            <p className="text-sm text-gray-600 hidden md:block">Real-time messaging via Pusher & WhatsApp API</p>
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
@@ -680,7 +795,34 @@ const Messages = () => {
 
               {/* Message Input */}
               <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
+                {showTemplates && templates.length > 0 && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border max-h-40 overflow-y-auto">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Templates ({templates.length})</h4>
+                    <div className="space-y-2">
+                      {templates.map((template) => (
+                        <button
+                          key={template.id}
+                          onClick={() => sendTemplate(template)}
+                          className="w-full text-left p-2 text-sm bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="font-medium">{template.name}</div>
+                          <div className="text-gray-500 text-xs truncate">{template.content}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setShowTemplates(!showTemplates)}
+                    className={`p-2 hover:bg-gray-100 rounded-full transition-colors ${
+                      templates.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                    disabled={templates.length === 0}
+                    title={templates.length === 0 ? 'No templates available. Sync templates first.' : 'Show templates'}
+                  >
+                    <FileText className="h-5 w-5" />
+                  </button>
                   <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
                     <Paperclip className="h-5 w-5" />
                   </button>
@@ -718,6 +860,15 @@ const Messages = () => {
                     <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                     <span className="text-gray-600">
                       Pusher: {isConnected ? 'Ready' : 'Connecting...'}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className={`h-2 w-2 rounded-full ${
+                      apiStatus.checking ? 'bg-yellow-500' : 
+                      apiStatus.connected ? 'bg-green-500' : 'bg-red-500'
+                    }`}></div>
+                    <span className="text-gray-600">
+                      WhatsApp: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Ready' : 'Configure in Settings'}
                     </span>
                   </div>
                 </div>
