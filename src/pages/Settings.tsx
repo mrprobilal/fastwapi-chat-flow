@@ -28,23 +28,32 @@ const Settings = () => {
   });
 
   const [saving, setSaving] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // Initialize services
-    databaseService.initializeSettings();
+    let unsubscribe: (() => void) | undefined;
 
-    // Subscribe to settings changes
-    const unsubscribe = databaseService.onSettingsChange((newSettings) => {
-      if (newSettings) {
-        setSettings(prevSettings => ({ ...prevSettings, ...newSettings }));
+    const initializeSettings = async () => {
+      // Initialize services
+      await databaseService.initializeSettings();
+      
+      // Load initial settings
+      const initialSettings = databaseService.getSettings();
+      if (initialSettings) {
+        setSettings(prevSettings => ({ ...prevSettings, ...initialSettings }));
       }
-    });
+      
+      setIsInitialized(true);
 
-    // Load initial settings
-    const initialSettings = databaseService.getSettings();
-    if (initialSettings) {
-      setSettings(prevSettings => ({ ...prevSettings, ...initialSettings }));
-    }
+      // Subscribe to settings changes only after initialization
+      unsubscribe = databaseService.onSettingsChange((newSettings) => {
+        if (newSettings && isInitialized) {
+          setSettings(prevSettings => ({ ...prevSettings, ...newSettings }));
+        }
+      });
+    };
+
+    initializeSettings();
 
     // Check connections
     const checkConnections = () => {
@@ -58,12 +67,15 @@ const Settings = () => {
 
     return () => {
       clearInterval(connectionInterval);
-      unsubscribe();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    console.log(`Input change: ${name} = ${value}`);
     setSettings(prev => ({ ...prev, [name]: value }));
   };
 
@@ -125,35 +137,35 @@ const Settings = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Access Token</label>
-              <Input
+              <input
                 type="text"
                 name="accessToken"
                 value={settings.accessToken}
                 onChange={handleInputChange}
                 placeholder="WhatsApp Business API Access Token"
-                className="w-full"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Business ID</label>
-              <Input
+              <input
                 type="text"
                 name="businessId"
                 value={settings.businessId}
                 onChange={handleInputChange}
                 placeholder="WhatsApp Business Account ID"
-                className="w-full"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number ID</label>
-              <Input
+              <input
                 type="text"
                 name="phoneNumberId"
                 value={settings.phoneNumberId}
                 onChange={handleInputChange}
                 placeholder="WhatsApp Business Phone Number ID"
-                className="w-full"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>
             <div>
