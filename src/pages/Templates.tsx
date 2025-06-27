@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Send, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { databaseService } from '../services/databaseService';
-import { whatsappService } from '../services/whatsappService';
+import { backendService } from '../services/backendService';
 
 const Templates = () => {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -27,17 +27,20 @@ const Templates = () => {
     try {
       const settings = databaseService.getSettings();
       
-      if (!settings?.accessToken || !settings?.businessId) {
-        toast.error('Please configure your WhatsApp API settings in Settings first');
+      if (!settings?.backendUrl) {
+        toast.error('Please configure your FastWAPI backend URL in Settings first');
         setIsSyncing(false);
         return;
       }
 
-      console.log('Using settings for sync:', { businessId: settings.businessId, hasToken: !!settings.accessToken });
+      console.log('Using backend URL for sync:', settings.backendUrl);
       
-      const syncedTemplates = await whatsappService.syncTemplates();
+      const syncedTemplates = await backendService.syncTemplates();
       
       setTemplates(syncedTemplates);
+      
+      // Save to localStorage
+      localStorage.setItem('whatsapp-templates', JSON.stringify(syncedTemplates));
       
       if (syncedTemplates.length > 0) {
         toast.success(`${syncedTemplates.length} templates synced successfully!`);
@@ -85,7 +88,7 @@ const Templates = () => {
             {templates.length === 0 ? (
               <div className="p-6 text-center text-gray-500">
                 <p>No templates available</p>
-                <p className="text-sm">Click "Sync Templates" to load your templates</p>
+                <p className="text-sm">Click "Sync Templates" to load your templates from your FastWAPI backend</p>
               </div>
             ) : (
               templates.map((template) => (
