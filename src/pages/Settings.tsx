@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Save, TestTube, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,6 +13,7 @@ const Settings = () => {
     phoneNumberId: '',
     webhookVerifyToken: '',
     backendUrl: '',
+    backendToken: '',
     pusherAppId: '2012752',
     pusherKey: '490510485d3b7c3874d4',
     pusherSecret: 'bdafa26e3b3d42f53d5c',

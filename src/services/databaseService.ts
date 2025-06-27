@@ -1,3 +1,4 @@
+
 export interface BusinessSettings {
   pusherKey: string;
   pusherSecret: string;
@@ -12,6 +13,26 @@ export interface BusinessSettings {
 
 class DatabaseService {
   private storageKey = 'whatsapp-business-settings';
+
+  initializeSettings(): void {
+    // Initialize settings with defaults if not present
+    const settings = this.getSettings();
+    this.saveSettings(settings);
+  }
+
+  onSettingsChange(callback: (settings: BusinessSettings) => void): () => void {
+    // Simple implementation - in a real app you'd use proper event listeners
+    const checkForChanges = () => {
+      const settings = this.getSettings();
+      callback(settings);
+    };
+    
+    // Check for changes every second (simple polling)
+    const interval = setInterval(checkForChanges, 1000);
+    
+    // Return cleanup function
+    return () => clearInterval(interval);
+  }
 
   getSettings(): BusinessSettings {
     try {

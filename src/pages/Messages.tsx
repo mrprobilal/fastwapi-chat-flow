@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Search, Send, FileText, Paperclip, Smile, ArrowLeft } from 'lucide-react';
 import { usePusher } from '../hooks/usePusher';
+import { pusherService } from '../services/pusherService';
 import { toast } from 'sonner';
 import { useLocation } from 'react-router-dom';
 import { useIsMobile } from '../hooks/use-mobile';
