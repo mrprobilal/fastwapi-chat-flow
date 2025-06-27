@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Search, Send, FileText, Phone, Video, MoreVertical, Paperclip, Smile } from 'lucide-react';
+import { MessageSquare, Search, Send, FileText, MoreVertical, Paperclip, Smile } from 'lucide-react';
 import { usePusher } from '../hooks/usePusher';
 import { toast } from 'sonner';
 import { useLocation } from 'react-router-dom';
@@ -10,27 +10,56 @@ const Messages = () => {
   const [selectedChat, setSelectedChat] = useState(1);
   const [newMessage, setNewMessage] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState([]);
   const [messages, setMessages] = useState([
-    { id: 1, sender: 'customer', text: 'Hi, I need help with my order', time: '2:25 PM', status: 'delivered' },
-    { id: 2, sender: 'business', text: 'Hello! I\'d be happy to help you with your order. Can you please provide your order number?', time: '2:26 PM', status: 'read' },
-    { id: 3, sender: 'customer', text: 'Sure, it\'s #12345', time: '2:28 PM', status: 'delivered' },
-    { id: 4, sender: 'business', text: 'Thank you! I can see your order is being processed and will be shipped tomorrow.', time: '2:29 PM', status: 'read' },
-    { id: 5, sender: 'customer', text: 'Thank you for the quick response!', time: '2:30 PM', status: 'delivered' },
+    { id: 1, sender: 'business', text: 'Hello! I\'d be happy to help you with your order. Can you please provide your order number?', time: '2:26 PM', status: 'read' },
+    { id: 2, sender: 'business', text: 'Thank you! I can see your order is being processed and will be shipped tomorrow.', time: '2:29 PM', status: 'read' },
   ]);
 
   const { isConnected, subscribeToMessages, unsubscribeFromMessages } = usePusher();
-
-  const templates = [
-    { id: 1, name: 'Welcome Message', content: 'Welcome! How can we help you today?' },
-    { id: 2, name: 'Order Status', content: 'Your order is being processed and will be shipped soon.' },
-    { id: 3, name: 'Thank You', content: 'Thank you for choosing our service!' },
-  ];
 
   const [chats, setChats] = useState([
     { id: 1, name: 'John Doe', phone: '+1234567890', lastMessage: 'Thank you for the quick response!', time: '2:30 PM', unread: 2, avatar: 'JD', online: true },
     { id: 2, name: 'Sarah Wilson', phone: '+1987654321', lastMessage: 'Can you send me the details?', time: '1:15 PM', unread: 0, avatar: 'SW', online: false },
     { id: 3, name: 'Mike Johnson', phone: '+1122334455', lastMessage: 'Perfect, thanks!', time: '11:45 AM', unread: 1, avatar: 'MJ', online: true },
   ]);
+
+  // Load templates from API
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+        if (!settings.accessToken || !settings.businessId) {
+          return;
+        }
+
+        const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}/message_templates`, {
+          headers: {
+            'Authorization': `Bearer ${settings.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Templates loaded:', data);
+          
+          if (data.data) {
+            const formattedTemplates = data.data.map((template, index) => ({
+              id: template.id || index + 1,
+              name: template.name || `Template ${index + 1}`,
+              content: template.components?.find(c => c.type === 'BODY')?.text || 'Template content'
+            }));
+            setTemplates(formattedTemplates);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading templates:', error);
+      }
+    };
+
+    loadTemplates();
+  }, []);
 
   // Handle selected customer from navigation
   useEffect(() => {
@@ -61,7 +90,10 @@ const Messages = () => {
   useEffect(() => {
     const savedMessages = localStorage.getItem('whatsapp-messages');
     if (savedMessages) {
-      setMessages(JSON.parse(savedMessages));
+      const allMessages = JSON.parse(savedMessages);
+      // Only show business messages (messages we sent)
+      const businessMessages = allMessages.filter(msg => msg.sender === 'business');
+      setMessages(businessMessages);
     }
   }, [selectedChat]);
 
@@ -75,17 +107,19 @@ const Messages = () => {
     subscribeToMessages((data) => {
       console.log('New message received:', data);
       
-      // Add new message to the chat
-      const newMsg = {
-        id: Date.now(),
-        sender: data.sender || 'customer',
-        text: data.message || data.text,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'delivered'
-      };
-      
-      setMessages(prev => [...prev, newMsg]);
-      toast.success('New message received!');
+      // Only add if it's a business message
+      if (data.sender === 'business') {
+        const newMsg = {
+          id: Date.now(),
+          sender: 'business',
+          text: data.message || data.text,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'delivered'
+        };
+        
+        setMessages(prev => [...prev, newMsg]);
+        toast.success('New message received!');
+      }
     });
 
     return () => {
@@ -107,17 +141,19 @@ const Messages = () => {
     setMessages(prev => [...prev, messageData]);
     setNewMessage('');
 
-    // Here you would send to your fastwapi.com backend
+    // Send to WhatsApp Business API
     try {
-      const response = await fetch('https://fastwapi.com/api/send-message', {
+      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${settings.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: newMessage,
-          phone: '+1234567890', // Selected chat phone
-          // Add other required fields
+          messaging_product: 'whatsapp',
+          to: getSelectedChat()?.phone?.replace('+', ''),
+          text: { body: newMessage }
         })
       });
 
@@ -153,14 +189,21 @@ const Messages = () => {
     setShowTemplates(false);
 
     try {
-      const response = await fetch('https://fastwapi.com/api/send-template', {
+      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${settings.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          template_id: template.id,
-          phone: '+1234567890',
+          messaging_product: 'whatsapp',
+          to: getSelectedChat()?.phone?.replace('+', ''),
+          type: 'template',
+          template: {
+            name: template.name,
+            language: { code: 'en_US' }
+          }
         })
       });
 
@@ -190,15 +233,15 @@ const Messages = () => {
   return (
     <div className="h-screen bg-gray-100 flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3">
+      <div className="bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Messages</h1>
-            <p className="text-sm text-gray-600">Real-time messaging with your customers</p>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Messages</h1>
+            <p className="text-sm text-gray-600 hidden md:block">Real-time messaging with your customers</p>
           </div>
           <div className="flex items-center space-x-2">
             <div className={`h-3 w-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-gray-600 hidden md:inline">
               {isConnected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
@@ -207,13 +250,13 @@ const Messages = () => {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Chat List */}
-        <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
-          <div className="p-4 border-b border-gray-200">
+        <div className="w-full md:w-1/3 bg-white border-r border-gray-200 flex flex-col md:flex">
+          <div className="p-4 border-b border-gray-200 flex-shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <input
                 type="text"
-                placeholder="Search or start new chat"
+                placeholder="Search chats"
                 className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
               />
             </div>
@@ -228,7 +271,7 @@ const Messages = () => {
                 }`}
               >
                 <div className="flex items-center space-x-3">
-                  <div className="relative">
+                  <div className="relative flex-shrink-0">
                     <div className="h-12 w-12 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-white font-semibold text-sm">
                       {chat.avatar}
                     </div>
@@ -257,11 +300,11 @@ const Messages = () => {
         </div>
 
         {/* Chat Messages */}
-        <div className="flex-1 flex flex-col bg-gradient-to-b from-green-50 to-white">
+        <div className="hidden md:flex flex-1 flex-col bg-gradient-to-b from-green-50 to-white">
           {selectedChatData ? (
             <>
               {/* Chat Header */}
-              <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="relative">
@@ -281,12 +324,6 @@ const Messages = () => {
                   </div>
                   <div className="flex items-center space-x-2">
                     <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                      <Phone className="h-5 w-5 text-gray-600" />
-                    </button>
-                    <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                      <Video className="h-5 w-5 text-gray-600" />
-                    </button>
-                    <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                       <MoreVertical className="h-5 w-5 text-gray-600" />
                     </button>
                   </div>
@@ -298,54 +335,42 @@ const Messages = () => {
                 {messages.map((message) => (
                   <div
                     key={message.id}
-                    className={`flex ${message.sender === 'business' ? 'justify-end' : 'justify-start'}`}
+                    className="flex justify-end"
                   >
-                    <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg relative ${
-                        message.sender === 'business'
-                          ? 'bg-green-500 text-white rounded-br-none'
-                          : 'bg-white text-gray-900 shadow-sm border border-gray-200 rounded-bl-none'
-                      }`}
-                    >
+                    <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-lg relative bg-green-500 text-white rounded-br-none">
                       <p className="text-sm leading-relaxed">{message.text}</p>
                       <div className="flex items-center justify-end mt-1 space-x-1">
-                        <p className={`text-xs ${
-                          message.sender === 'business' ? 'text-green-100' : 'text-gray-500'
-                        }`}>
-                          {message.time}
-                        </p>
-                        {message.sender === 'business' && (
-                          <div className="flex">
-                            {message.status === 'sending' && (
-                              <div className="h-3 w-3 border-2 border-green-200 border-t-green-100 rounded-full animate-spin"></div>
-                            )}
-                            {message.status === 'sent' && (
-                              <svg className="h-3 w-3 text-green-100" fill="currentColor" viewBox="0 0 20 20">
+                        <p className="text-xs text-green-100">{message.time}</p>
+                        <div className="flex">
+                          {message.status === 'sending' && (
+                            <div className="h-3 w-3 border-2 border-green-200 border-t-green-100 rounded-full animate-spin"></div>
+                          )}
+                          {message.status === 'sent' && (
+                            <svg className="h-3 w-3 text-green-100" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                          {message.status === 'delivered' && (
+                            <svg className="h-3 w-3 text-green-100" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                          {message.status === 'read' && (
+                            <div className="flex">
+                              <svg className="h-3 w-3 text-blue-300" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                               </svg>
-                            )}
-                            {message.status === 'delivered' && (
-                              <svg className="h-3 w-3 text-green-100" fill="currentColor" viewBox="0 0 20 20">
+                              <svg className="h-3 w-3 text-blue-300 -ml-1" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                               </svg>
-                            )}
-                            {message.status === 'read' && (
-                              <div className="flex">
-                                <svg className="h-3 w-3 text-blue-300" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                                <svg className="h-3 w-3 text-blue-300 -ml-1" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                            )}
-                            {message.status === 'failed' && (
-                              <svg className="h-3 w-3 text-red-300" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                              </svg>
-                            )}
-                          </div>
-                        )}
+                            </div>
+                          )}
+                          {message.status === 'failed' && (
+                            <svg className="h-3 w-3 text-red-300" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -353,11 +378,11 @@ const Messages = () => {
               </div>
 
               {/* Message Input */}
-              <div className="bg-white border-t border-gray-200 p-4">
-                {showTemplates && (
+              <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
+                {showTemplates && templates.length > 0 && (
                   <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">Quick Templates</h4>
-                    <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Message Templates</h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
                       {templates.map((template) => (
                         <button
                           key={template.id}

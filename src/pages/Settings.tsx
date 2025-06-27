@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, TestTube } from 'lucide-react';
+import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { pusherService } from '../services/pusherService';
 
@@ -16,9 +16,11 @@ const Settings = () => {
   });
 
   const [connectionStatus, setConnectionStatus] = useState({
-    whatsapp: true,
+    whatsapp: false,
     pusher: false
   });
+
+  const [testingWhatsApp, setTestingWhatsApp] = useState(false);
 
   useEffect(() => {
     // Load settings from localStorage
@@ -51,6 +53,42 @@ const Settings = () => {
     toast.success('Settings saved successfully!');
   };
 
+  const testWhatsAppConnection = async () => {
+    if (!settings.accessToken || !settings.businessId) {
+      toast.error('Please enter Access Token and Business ID first');
+      return;
+    }
+
+    setTestingWhatsApp(true);
+    try {
+      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${settings.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('WhatsApp connection test successful:', data);
+        setConnectionStatus(prev => ({ ...prev, whatsapp: true }));
+        toast.success('WhatsApp Business API connection successful!');
+      } else {
+        const errorData = await response.json();
+        console.error('WhatsApp connection test failed:', errorData);
+        setConnectionStatus(prev => ({ ...prev, whatsapp: false }));
+        toast.error(`WhatsApp connection failed: ${errorData.error?.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('WhatsApp connection test error:', error);
+      setConnectionStatus(prev => ({ ...prev, whatsapp: false }));
+      toast.error('Failed to test WhatsApp connection');
+    } finally {
+      setTestingWhatsApp(false);
+    }
+  };
+
   const testPusherConnection = () => {
     try {
       pusherService.connect(settings.pusherKey, settings.pusherCluster);
@@ -62,20 +100,30 @@ const Settings = () => {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">API Settings</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">API Settings</h1>
         <p className="text-gray-600 mt-2">Configure your WhatsApp Business API and Pusher settings</p>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
         <div className="space-y-6">
           {/* WhatsApp Business API Settings */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">WhatsApp Business API</h3>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+              <h3 className="text-lg font-semibold text-gray-900">WhatsApp Business API</h3>
+              <button
+                onClick={testWhatsAppConnection}
+                disabled={testingWhatsApp}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
+              >
+                <TestTube className="h-4 w-4" />
+                {testingWhatsApp ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Access Token</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Access Token *</label>
                 <input
                   type="password"
                   name="accessToken"
@@ -86,7 +134,7 @@ const Settings = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Business ID</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Business ID *</label>
                 <input
                   type="text"
                   name="businessId"
@@ -97,7 +145,7 @@ const Settings = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number ID</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number ID *</label>
                 <input
                   type="text"
                   name="phoneNumberId"
@@ -112,7 +160,7 @@ const Settings = () => {
 
           {/* Pusher Settings */}
           <div className="pt-6 border-t border-gray-200">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
               <h3 className="text-lg font-semibold text-gray-900">Pusher Real-time Settings</h3>
               <button
                 onClick={testPusherConnection}
@@ -176,7 +224,11 @@ const Settings = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className={`p-4 rounded-lg border ${connectionStatus.whatsapp ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                 <div className="flex items-center">
-                  <div className={`h-2 w-2 rounded-full mr-2 ${connectionStatus.whatsapp ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                  {connectionStatus.whatsapp ? (
+                    <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-600 mr-2" />
+                  )}
                   <span className={`text-sm font-medium ${connectionStatus.whatsapp ? 'text-green-800' : 'text-red-800'}`}>WhatsApp API</span>
                 </div>
                 <p className={`text-xs mt-1 ${connectionStatus.whatsapp ? 'text-green-600' : 'text-red-600'}`}>
@@ -185,7 +237,11 @@ const Settings = () => {
               </div>
               <div className={`p-4 rounded-lg border ${connectionStatus.pusher ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                 <div className="flex items-center">
-                  <div className={`h-2 w-2 rounded-full mr-2 ${connectionStatus.pusher ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                  {connectionStatus.pusher ? (
+                    <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-600 mr-2" />
+                  )}
                   <span className={`text-sm font-medium ${connectionStatus.pusher ? 'text-green-800' : 'text-red-800'}`}>Pusher Real-time</span>
                 </div>
                 <p className={`text-xs mt-1 ${connectionStatus.pusher ? 'text-green-600' : 'text-red-600'}`}>
@@ -208,7 +264,7 @@ const Settings = () => {
       </div>
 
       {/* Integration Instructions */}
-      <div className="mt-8 bg-blue-50 rounded-lg border border-blue-200 p-6">
+      <div className="mt-8 bg-blue-50 rounded-lg border border-blue-200 p-4 md:p-6">
         <h3 className="text-lg font-semibold text-blue-900 mb-4">Website Integration Instructions</h3>
         <div className="space-y-3 text-sm text-blue-800">
           <p><strong>1. Add Pusher to your fastwapi.com website:</strong></p>
