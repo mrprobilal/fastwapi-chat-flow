@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Send, Users, Upload, Plus, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -18,7 +17,7 @@ const Campaigns = () => {
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [selectedGroup, setSelectedGroup] = useState<any>(null);
   const [campaignForm, setCampaignForm] = useState({
     name: '',
     template: '',
@@ -62,7 +61,7 @@ const Campaigns = () => {
     }
   };
 
-  const handleEditGroup = (group) => {
+  const handleEditGroup = (group: any) => {
     setSelectedGroup(group);
     setGroupForm({ name: group.name, description: group.description || '' });
     setShowGroupModal(true);
@@ -73,7 +72,12 @@ const Campaigns = () => {
       setGroups(groups.map(g => g.id === selectedGroup.id ? { ...g, ...groupForm } : g));
       toast.success('Group updated successfully!');
     } else {
-      const newGroup = { id: Date.now(), ...groupForm, count: 0 };
+      const newGroup = { 
+        id: Math.floor(Math.random() * 10000), 
+        name: groupForm.name, 
+        description: groupForm.description, 
+        count: 0 
+      };
       setGroups([...groups, newGroup]);
       toast.success('Group created successfully!');
     }
@@ -286,7 +290,7 @@ const Campaigns = () => {
                   onChange={(e) => setGroupForm({...groupForm, description: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   placeholder="Enter group description"
-                  rows="3"
+                  rows={3}
                 />
               </div>
             </div>
