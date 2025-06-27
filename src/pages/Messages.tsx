@@ -13,6 +13,7 @@ const Messages = () => {
   const [showTemplates, setShowTemplates] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [apiStatus, setApiStatus] = useState({ checking: false, connected: false });
 
   const { isConnected, subscribeToMessages, unsubscribeFromMessages } = usePusher();
 
@@ -134,19 +135,11 @@ const Messages = () => {
     }
   }, [location.state]);
 
-  // Enhanced message receiving with better debugging
+  // Enhanced message receiving
   useEffect(() => {
     const handleIncomingMessage = (data) => {
       console.log('📨 Raw Pusher event received:', data);
-      console.log('📨 Event structure:', {
-        type: typeof data,
-        keys: Object.keys(data || {}),
-        hasMessage: !!data.message,
-        hasFrom: !!data.from,
-        hasPhone: !!data.phone
-      });
       
-      // Handle different data structures from webhook
       const messageText = data.message || data.text || data.body || data.content;
       const senderPhone = data.from || data.phone || data.sender;
       const senderName = data.contact_name || data.name || data.contact;
@@ -199,6 +192,13 @@ const Messages = () => {
       toast.success(`📨 New message from ${senderName || senderPhone}!`);
     };
 
+    // Listen for test messages
+    const handleTestMessage = (event) => {
+      handleIncomingMessage(event.detail);
+    };
+
+    window.addEventListener('test-pusher-message', handleTestMessage);
+
     if (isConnected) {
       console.log('🔌 Pusher connected, subscribing to messages...');
       subscribeToMessages(handleIncomingMessage);
@@ -208,11 +208,12 @@ const Messages = () => {
 
     return () => {
       console.log('🔌 Unsubscribing from messages...');
+      window.removeEventListener('test-pusher-message', handleTestMessage);
       unsubscribeFromMessages();
     };
   }, [isConnected, subscribeToMessages, unsubscribeFromMessages, selectedChat]);
 
-  // Simplified message sending - removed WhatsApp API calls
+  // Simplified message sending
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;
 
@@ -223,7 +224,7 @@ const Messages = () => {
       text: newMessage,
       timestamp: new Date().toISOString(),
       type: 'sent',
-      status: 'sent' // Mark as sent immediately since we're not using WhatsApp API
+      status: 'sent'
     };
 
     console.log('📤 Sending message:', messageData);
@@ -247,13 +248,6 @@ const Messages = () => {
 
     setNewMessage('');
     toast.success('Message sent! (Will be processed by your FastWAPI backend)');
-
-    // TODO: Add your FastWAPI endpoint call here
-    // await fetch('your-fastwapi-endpoint/send-message', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ to: selectedChat, message: newMessage })
-    // });
   };
 
   const sendTemplate = (template) => {
