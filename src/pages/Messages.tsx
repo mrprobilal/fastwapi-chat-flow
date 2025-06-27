@@ -22,17 +22,20 @@ const Messages = () => {
     apiStatus, 
     setMessages, 
     setChats, 
+    setTemplates,
     addOrUpdateChat, 
-    normalizePhoneNumber 
+    normalizePhoneNumber,
+    syncTemplates
   } = useMessages();
 
   // Debug: Log messages and chats when they change
   useEffect(() => {
     console.log('📊 Messages updated:', messages.length, 'messages');
     console.log('📊 Chats updated:', chats.length, 'chats');
+    console.log('📊 Templates updated:', templates.length, 'templates');
     console.log('📊 Current messages:', messages);
     console.log('📊 Current chats:', chats);
-  }, [messages, chats]);
+  }, [messages, chats, templates]);
 
   // Helper function to find existing chat by phone number
   const findExistingChat = (phone) => {
@@ -106,7 +109,7 @@ const Messages = () => {
     setNewMessage('');
 
     try {
-      // Send via WhatsApp API if connected
+      // Send via FastWAPI if connected
       if (apiStatus.connected) {
         await whatsappService.sendMessage(selectedChat, messageText);
         
@@ -119,7 +122,7 @@ const Messages = () => {
           return updated;
         });
         
-        toast.success('Message sent via WhatsApp!');
+        toast.success('Message sent via FastWAPI!');
       } else {
         // Update message status to sent (local only)
         setMessages(prev => {
@@ -130,7 +133,7 @@ const Messages = () => {
           return updated;
         });
         
-        toast.success('Message saved locally (WhatsApp API not connected)');
+        toast.success('Message saved locally (FastWAPI not connected)');
       }
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -181,7 +184,7 @@ const Messages = () => {
     });
 
     try {
-      // Send via WhatsApp API if connected
+      // Send via FastWAPI if connected
       if (apiStatus.connected) {
         await whatsappService.sendTemplateMessage(template.name, selectedChat);
         
@@ -194,7 +197,7 @@ const Messages = () => {
           return updated;
         });
         
-        toast.success(`Template "${template.name}" sent via WhatsApp!`);
+        toast.success(`Template "${template.name}" sent via FastWAPI!`);
       } else {
         // Update message status to sent (local only)
         setMessages(prev => {
@@ -205,7 +208,7 @@ const Messages = () => {
           return updated;
         });
         
-        toast.success('Template saved locally (WhatsApp API not connected)');
+        toast.success('Template saved locally (FastWAPI not connected)');
       }
     } catch (error) {
       console.error('Failed to send template:', error);
@@ -263,6 +266,19 @@ const Messages = () => {
       const event = new CustomEvent('test-pusher-message', { detail: data });
       window.dispatchEvent(event);
     }
+  };
+
+  // Load templates on demand
+  const handleShowTemplates = async () => {
+    if (templates.length === 0) {
+      try {
+        await syncTemplates();
+      } catch (error) {
+        console.error('Failed to sync templates:', error);
+        toast.error('Failed to load templates');
+      }
+    }
+    setShowTemplates(!showTemplates);
   };
 
   // Mobile view - show only chat list or selected chat
@@ -371,12 +387,8 @@ const Messages = () => {
             )}
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => setShowTemplates(!showTemplates)}
-                className={`p-2 hover:bg-gray-100 rounded-full transition-colors ${
-                  templates.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:text-gray-700'
-                }`}
-                disabled={templates.length === 0}
-                title={templates.length === 0 ? 'No templates available. Sync templates first.' : 'Show templates'}
+                onClick={handleShowTemplates}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-gray-700"
               >
                 <FileText className="h-5 w-5" />
               </button>
@@ -493,7 +505,7 @@ const Messages = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-gray-900">Messages</h1>
-            <p className="text-sm text-gray-600 hidden md:block">Real-time messaging via Pusher & WhatsApp API</p>
+            <p className="text-sm text-gray-600 hidden md:block">Real-time messaging via Pusher & FastWAPI</p>
           </div>
           <div className="flex items-center space-x-4">
             <TestMessage onTestMessage={handleTestMessage} />
@@ -666,12 +678,8 @@ const Messages = () => {
                 )}
                 <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => setShowTemplates(!showTemplates)}
-                    className={`p-2 hover:bg-gray-100 rounded-full transition-colors ${
-                      templates.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                    disabled={templates.length === 0}
-                    title={templates.length === 0 ? 'No templates available. Sync templates first.' : 'Show templates'}
+                    onClick={handleShowTemplates}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-gray-700"
                   >
                     <FileText className="h-5 w-5" />
                   </button>

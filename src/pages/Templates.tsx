@@ -29,22 +29,14 @@ const Templates = () => {
   const handleSyncTemplates = async () => {
     setIsSyncing(true);
     try {
-      const settings = databaseService.getSettings();
-      
-      if (!settings?.accessToken || !settings?.businessId) {
-        toast.error('Please configure your WhatsApp Business API credentials in Settings first');
-        setIsSyncing(false);
-        return;
-      }
-
-      console.log('Using WhatsApp Business API for sync');
+      console.log('Syncing templates from FastWAPI...');
       
       const syncedTemplates = await whatsappService.syncTemplates();
       
       setTemplates(syncedTemplates);
       
       if (syncedTemplates.length > 0) {
-        toast.success(`${syncedTemplates.length} templates synced successfully!`);
+        toast.success(`${syncedTemplates.length} templates synced successfully from FastWAPI!`);
       } else {
         toast.success('Templates synced successfully! No templates found.');
       }
@@ -77,7 +69,7 @@ const Templates = () => {
         templateVariables
       );
       
-      toast.success('Template message sent successfully!');
+      toast.success('Template message sent successfully via FastWAPI!');
       
       // Clear form
       setPhoneNumber('');
@@ -95,7 +87,7 @@ const Templates = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Template Messages</h1>
-          <p className="text-gray-600 mt-2">Send approved WhatsApp Business templates to your customers</p>
+          <p className="text-gray-600 mt-2">Send approved WhatsApp templates via FastWAPI to your customers</p>
         </div>
         <div className="flex gap-3">
           <button 
@@ -123,7 +115,7 @@ const Templates = () => {
             {templates.length === 0 ? (
               <div className="p-6 text-center text-gray-500">
                 <p>No templates available</p>
-                <p className="text-sm">Click "Sync Templates" to load your templates from WhatsApp Business API</p>
+                <p className="text-sm">Click "Sync Templates" to load your templates from FastWAPI</p>
               </div>
             ) : (
               templates.map((template) => (
@@ -213,7 +205,7 @@ const Templates = () => {
             <div className="p-6 text-center">
               <Send className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">Select a Template</h3>
-              <p className="text-gray-600">Choose a template from the list to preview and send it to your customers.</p>
+              <p className="text-gray-600">Choose a template from the list to preview and send it to your customers via FastWAPI.</p>
             </div>
           )}
         </div>

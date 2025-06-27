@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usePusher } from './usePusher';
 import { fastwAPIService } from '../services/fastwAPIService';
+import { whatsappService } from '../services/whatsappService';
 import { toast } from 'sonner';
 
 export const useMessages = () => {
@@ -83,6 +84,19 @@ export const useMessages = () => {
     }
   }, []);
 
+  // Sync templates function
+  const syncTemplates = useCallback(async () => {
+    try {
+      console.log('🔄 Syncing templates from FastWAPI...');
+      const syncedTemplates = await whatsappService.syncTemplates();
+      setTemplates(syncedTemplates);
+      toast.success(`✅ Synced ${syncedTemplates.length} templates from FastWAPI`);
+    } catch (error: any) {
+      console.error('❌ Template sync failed:', error);
+      toast.error(`Template sync failed: ${error.message}`);
+    }
+  }, []);
+
   // Load initial data
   useEffect(() => {
     const loadInitialData = async () => {
@@ -104,6 +118,12 @@ export const useMessages = () => {
           }
         }
 
+        const savedTemplates = localStorage.getItem('whatsapp-templates');
+        if (savedTemplates) {
+          const parsedTemplates = JSON.parse(savedTemplates);
+          setTemplates(parsedTemplates);
+        }
+
         // Check FastWAPI connection
         setApiStatus(prev => ({ ...prev, checking: true }));
         try {
@@ -113,6 +133,11 @@ export const useMessages = () => {
           // If we have a connection and no local data, perform initial sync
           if ((!savedMessages || !savedChats) && window.confirm('Would you like to sync your WhatsApp data from FastWAPI?')) {
             await syncAllData();
+          }
+
+          // If no templates, sync them
+          if (!savedTemplates) {
+            await syncTemplates();
           }
         } catch (error) {
           console.error('FastWAPI connection failed:', error);
@@ -125,7 +150,7 @@ export const useMessages = () => {
     };
 
     loadInitialData();
-  }, [deduplicateChats, syncAllData]);
+  }, [deduplicateChats, syncAllData, syncTemplates]);
 
   // Enhanced message handling for Pusher events
   const handleIncomingMessage = useCallback((data) => {
@@ -241,8 +266,10 @@ export const useMessages = () => {
     syncStatus,
     setMessages,
     setChats,
+    setTemplates,
     addOrUpdateChat,
     normalizePhoneNumber,
-    syncAllData
+    syncAllData,
+    syncTemplates
   };
 };

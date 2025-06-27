@@ -149,6 +149,77 @@ class FastWAPIService {
     }
   }
 
+  async getTemplates() {
+    console.log('📋 Getting templates from FastWAPI...');
+
+    try {
+      const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getTemplates`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({})
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`HTTP ${response.status}: ${errorData.message || response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Templates received:', data);
+
+      // Transform to our template format
+      const templates = data.templates?.map((template: any) => ({
+        id: template.id || template.name,
+        name: template.name,
+        content: template.content || template.body || '',
+        status: template.status || 'approved',
+        category: template.category || 'general',
+        language: template.language || 'en',
+        variables: this.extractVariables(template.content || template.body || '')
+      })) || [];
+
+      return templates;
+    } catch (error: any) {
+      console.error('❌ Get templates error:', error);
+      throw new Error(`Failed to get templates: ${error.message}`);
+    }
+  }
+
+  async sendTemplate(phone: string, templateName: string, variables: Record<string, string> = {}) {
+    console.log('📤 Sending template via FastWAPI:', { phone, templateName, variables });
+
+    try {
+      const response = await fetch(`${this.getBaseUrl()}/api/wpbox/sendTemplate`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          phone: phone,
+          template: templateName,
+          variables: variables
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`HTTP ${response.status}: ${errorData.message || response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Template sent via FastWAPI:', result);
+      
+      return result;
+    } catch (error: any) {
+      console.error('❌ FastWAPI template send error:', error);
+      throw new Error(`Failed to send template: ${error.message}`);
+    }
+  }
+
+  private extractVariables(text: string): string[] {
+    if (!text) return [];
+    const matches = text.match(/\{\{(\d+|\w+)\}\}/g);
+    return matches ? matches.map((match, index) => `variable_${index + 1}`) : [];
+  }
+
   async syncAllData() {
     console.log('🔄 Starting FastWAPI data sync...');
     
