@@ -101,13 +101,25 @@ export const useMessages = () => {
     checkWhatsAppConnection();
   }, [deduplicateChats]);
 
-  // Enhanced message handling with comprehensive debugging
+  // ULTRA-ENHANCED message handling with MAXIMUM debugging
   const handleIncomingMessage = useCallback((data) => {
-    console.log('🔥 ===== INCOMING WEBHOOK DATA =====');
-    console.log('🔥 Complete Raw Data:', JSON.stringify(data, null, 2));
-    console.log('🔥 Data Keys:', Object.keys(data || {}));
-    console.log('🔥 Data Type:', typeof data);
-    console.log('🔥 ===================================');
+    console.log('🚨🚨🚨 ===== INCOMING DATA ANALYSIS =====');
+    console.log('🚨 Raw Input Data:', data);
+    console.log('🚨 Data Type:', typeof data);
+    console.log('🚨 Data Constructor:', data?.constructor?.name);
+    console.log('🚨 Is Array:', Array.isArray(data));
+    console.log('🚨 Keys:', Object.keys(data || {}));
+    console.log('🚨 JSON String:', JSON.stringify(data, null, 2));
+    console.log('🚨🚨🚨 ===================================');
+    
+    // Save to window for debugging
+    if (typeof window !== 'undefined') {
+      (window as any).lastProcessedData = {
+        data,
+        timestamp: new Date().toISOString(),
+        processed: false
+      };
+    }
     
     try {
       let messageText = '';
@@ -116,268 +128,294 @@ export const useMessages = () => {
       let timestamp = new Date().toISOString();
       let messageId = '';
       
-      // COMPREHENSIVE WEBHOOK PARSING - All possible formats
+      // ULTRA-COMPREHENSIVE parsing - try EVERY possible format
+      console.log('🔍 Starting comprehensive data extraction...');
       
-      // Format 1: Standard WhatsApp Webhook (most common)
-      if (data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
-        console.log('🔍 Using Format 1: Standard WhatsApp Webhook');
-        const webhook = data.entry[0].changes[0].value;
-        const message = webhook.messages[0];
+      // Try to extract ANY text content from ANYWHERE in the data
+      const extractText = (obj, path = '') => {
+        if (obj === null || obj === undefined) return null;
         
-        messageText = message.text?.body || message.body || '';
-        senderPhone = message.from || '';
-        messageId = message.id || '';
-        
-        if (message.timestamp) {
-          timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
+        if (typeof obj === 'string' && obj.trim().length > 0) {
+          console.log(`📝 Found potential text at ${path}: "${obj}"`);
+          return obj.trim();
         }
         
-        // Get contact info
-        const contacts = webhook.contacts;
-        if (contacts?.[0]?.profile?.name) {
-          senderName = contacts[0].profile.name;
-        }
-        
-        console.log('✅ Webhook Format 1 - Extracted:', { messageText, senderPhone, senderName, messageId });
-      }
-      
-      // Format 2: Simplified webhook format
-      else if (data.messages?.[0]) {
-        console.log('🔍 Using Format 2: Simplified Webhook');
-        const msg = data.messages[0];
-        messageText = msg.text?.body || msg.body || msg.message || '';
-        senderPhone = msg.from || msg.phone || '';
-        senderName = msg.contact_name || msg.name || '';
-        messageId = msg.id || '';
-        
-        console.log('✅ Webhook Format 2 - Extracted:', { messageText, senderPhone, senderName, messageId });
-      }
-      
-      // Format 3: Direct message properties
-      else if (data.message || data.text || data.body) {
-        console.log('🔍 Using Format 3: Direct Properties');
-        messageText = data.message || data.text || data.body;
-        senderPhone = data.from || data.phone || data.sender || data.number;
-        senderName = data.contact_name || data.name || data.contact?.name;
-        messageId = data.id || data.message_id || '';
-        
-        console.log('✅ Direct Format 3 - Extracted:', { messageText, senderPhone, senderName, messageId });
-      }
-      
-      // Format 4: Nested webhook data
-      else if (data.webhook?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
-        console.log('🔍 Using Format 4: Nested Webhook');
-        const webhook = data.webhook.entry[0].changes[0].value;
-        const message = webhook.messages[0];
-        
-        messageText = message.text?.body || message.body || '';
-        senderPhone = message.from || '';
-        messageId = message.id || '';
-        
-        if (message.timestamp) {
-          timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
-        }
-        
-        const contacts = webhook.contacts;
-        if (contacts?.[0]?.profile?.name) {
-          senderName = contacts[0].profile.name;
-        }
-        
-        console.log('✅ Nested Format 4 - Extracted:', { messageText, senderPhone, senderName, messageId });
-      }
-      
-      // Format 5: Any other nested formats
-      else {
-        console.log('🔍 Using Format 5: Fallback Search');
-        
-        // Deep search for message text
-        const searchForText = (obj, path = '') => {
-          if (typeof obj !== 'object' || obj === null) return null;
-          
-          for (const [key, value] of Object.entries(obj)) {
-            const currentPath = path ? `${path}.${key}` : key;
-            
-            if ((key === 'body' || key === 'text' || key === 'message') && typeof value === 'string' && value.trim()) {
-              console.log(`📝 Found text at ${currentPath}:`, value);
-              return value;
+        if (typeof obj === 'object') {
+          // Check common text fields first
+          const textFields = ['text', 'body', 'message', 'content', 'msg'];
+          for (const field of textFields) {
+            if (obj[field] && typeof obj[field] === 'string' && obj[field].trim()) {
+              console.log(`📝 Found text in ${path}.${field}: "${obj[field]}"`);
+              return obj[field].trim();
             }
-            
-            if (typeof value === 'object' && value !== null) {
-              const result = searchForText(value, currentPath);
-              if (result) return result;
+            if (obj[field]?.body && typeof obj[field].body === 'string' && obj[field].body.trim()) {
+              console.log(`📝 Found text in ${path}.${field}.body: "${obj[field].body}"`);
+              return obj[field].body.trim();
             }
           }
-          return null;
-        };
-        
-        // Deep search for phone number
-        const searchForPhone = (obj, path = '') => {
-          if (typeof obj !== 'object' || obj === null) return null;
           
+          // Recursively search all properties
           for (const [key, value] of Object.entries(obj)) {
-            const currentPath = path ? `${path}.${key}` : key;
-            
-            if ((key === 'from' || key === 'phone' || key === 'sender' || key === 'number') && typeof value === 'string' && value.trim()) {
-              console.log(`📞 Found phone at ${currentPath}:`, value);
-              return value;
-            }
-            
-            if (typeof value === 'object' && value !== null) {
-              const result = searchForPhone(value, currentPath);
-              if (result) return result;
+            const newPath = path ? `${path}.${key}` : key;
+            const result = extractText(value, newPath);
+            if (result) return result;
+          }
+        }
+        
+        return null;
+      };
+      
+      // Try to extract ANY phone number from ANYWHERE in the data
+      const extractPhone = (obj, path = '') => {
+        if (obj === null || obj === undefined) return null;
+        
+        if (typeof obj === 'string') {
+          // Check if it looks like a phone number
+          const phonePattern = /^[\+]?[1-9][\d]{7,14}$/;
+          const cleanPhone = obj.replace(/\D/g, '');
+          if (phonePattern.test(obj) || (cleanPhone.length >= 8 && cleanPhone.length <= 15)) {
+            console.log(`📞 Found potential phone at ${path}: "${obj}"`);
+            return obj;
+          }
+        }
+        
+        if (typeof obj === 'object') {
+          // Check common phone fields first
+          const phoneFields = ['from', 'phone', 'number', 'sender', 'wa_id', 'whatsapp_id'];
+          for (const field of phoneFields) {
+            if (obj[field] && typeof obj[field] === 'string') {
+              const cleanPhone = obj[field].replace(/\D/g, '');
+              if (cleanPhone.length >= 8 && cleanPhone.length <= 15) {
+                console.log(`📞 Found phone in ${path}.${field}: "${obj[field]}"`);
+                return obj[field];
+              }
             }
           }
-          return null;
-        };
-        
-        // Deep search for name
-        const searchForName = (obj, path = '') => {
-          if (typeof obj !== 'object' || obj === null) return null;
           
+          // Recursively search all properties
           for (const [key, value] of Object.entries(obj)) {
-            const currentPath = path ? `${path}.${key}` : key;
-            
-            if ((key === 'name' || key === 'contact_name') && typeof value === 'string' && value.trim()) {
-              console.log(`👤 Found name at ${currentPath}:`, value);
-              return value;
-            }
-            
-            if (typeof value === 'object' && value !== null) {
-              const result = searchForName(value, currentPath);
-              if (result) return result;
+            const newPath = path ? `${path}.${key}` : key;
+            const result = extractPhone(value, newPath);
+            if (result) return result;
+          }
+        }
+        
+        return null;
+      };
+      
+      // Try to extract ANY name from ANYWHERE in the data
+      const extractName = (obj, path = '') => {
+        if (obj === null || obj === undefined) return null;
+        
+        if (typeof obj === 'string' && obj.trim().length > 0 && obj.trim().length < 100) {
+          // Skip if it looks like a phone number
+          const cleanString = obj.replace(/\D/g, '');
+          if (cleanString.length < 8) {
+            console.log(`👤 Found potential name at ${path}: "${obj}"`);
+            return obj.trim();
+          }
+        }
+        
+        if (typeof obj === 'object') {
+          // Check common name fields first
+          const nameFields = ['name', 'contact_name', 'profile_name', 'display_name', 'user_name'];
+          for (const field of nameFields) {
+            if (obj[field] && typeof obj[field] === 'string' && obj[field].trim()) {
+              console.log(`👤 Found name in ${path}.${field}: "${obj[field]}"`);
+              return obj[field].trim();
             }
           }
-          return null;
-        };
+          
+          // Check nested profile/contact objects
+          if (obj.profile?.name) {
+            console.log(`👤 Found name in ${path}.profile.name: "${obj.profile.name}"`);
+            return obj.profile.name;
+          }
+          if (obj.contact?.name) {
+            console.log(`👤 Found name in ${path}.contact.name: "${obj.contact.name}"`);
+            return obj.contact.name;
+          }
+        }
         
-        messageText = searchForText(data) || '';
-        senderPhone = searchForPhone(data) || '';
-        senderName = searchForName(data) || '';
+        return null;
+      };
+      
+      // Extract data using our comprehensive functions
+      messageText = extractText(data) || '';
+      senderPhone = extractPhone(data) || '';
+      senderName = extractName(data) || '';
+      
+      // Try specific FastWAPI format if general extraction didn't work
+      if (!messageText || !senderPhone) {
+        console.log('🔄 Trying FastWAPI-specific formats...');
         
-        console.log('✅ Fallback Format 5 - Extracted:', { messageText, senderPhone, senderName });
+        // Format patterns based on FastWAPI documentation
+        const patterns = [
+          // Standard WhatsApp webhook
+          () => {
+            const msg = data?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+            const contacts = data?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0];
+            return {
+              text: msg?.text?.body || msg?.body,
+              phone: msg?.from,
+              name: contacts?.profile?.name
+            };
+          },
+          // Direct message format
+          () => ({
+            text: data?.message || data?.text || data?.body,
+            phone: data?.from || data?.phone || data?.sender,
+            name: data?.name || data?.contact_name
+          }),
+          // Nested webhook format
+          () => {
+            const msg = data?.webhook?.messages?.[0] || data?.messages?.[0];
+            return {
+              text: msg?.text?.body || msg?.body || msg?.message,
+              phone: msg?.from || msg?.phone,
+              name: msg?.name || msg?.contact_name
+            };
+          }
+        ];
+        
+        for (let i = 0; i < patterns.length; i++) {
+          try {
+            const result = patterns[i]();
+            console.log(`🔍 Pattern ${i + 1} result:`, result);
+            
+            if (result.text && !messageText) messageText = result.text;
+            if (result.phone && !senderPhone) senderPhone = result.phone;
+            if (result.name && !senderName) senderName = result.name;
+            
+            if (messageText && senderPhone) break;
+          } catch (error) {
+            console.log(`❌ Pattern ${i + 1} failed:`, error);
+          }
+        }
       }
       
       console.log('🔥 FINAL EXTRACTED VALUES:');
       console.log(`📝 Message Text: "${messageText}"`);
       console.log(`📞 Sender Phone: "${senderPhone}"`);
       console.log(`👤 Sender Name: "${senderName}"`);
-      console.log(`🆔 Message ID: "${messageId}"`);
-      console.log(`⏰ Timestamp: "${timestamp}"`);
       
-      // Validation
-      if (!messageText) {
-        console.error('❌ NO MESSAGE TEXT FOUND!');
-        console.log('🔍 Trying to find any text-like content...');
+      // If we still don't have basic data, try one more desperate attempt
+      if (!messageText && !senderPhone) {
+        console.log('🆘 DESPERATE ATTEMPT - Looking for ANY text/phone patterns...');
         
-        // Last resort - look for any string values that might be the message
-        const findAnyText = (obj) => {
-          if (typeof obj === 'string' && obj.length > 0 && obj.length < 1000) {
-            return obj;
-          }
-          if (typeof obj === 'object' && obj !== null) {
-            for (const value of Object.values(obj)) {
-              const result = findAnyText(value);
-              if (result) return result;
+        const dataString = JSON.stringify(data);
+        console.log('🔍 Searching in JSON string:', dataString);
+        
+        // Look for phone patterns in the JSON string
+        const phoneMatches = dataString.match(/[\+]?[1-9]\d{7,14}/g);
+        if (phoneMatches && phoneMatches.length > 0) {
+          senderPhone = phoneMatches[0];
+          console.log(`📞 Found phone in JSON: ${senderPhone}`);
+        }
+        
+        // Look for text patterns (quoted strings that aren't phone numbers)
+        const textMatches = dataString.match(/"([^"]{1,500})"/g);
+        if (textMatches) {
+          for (const match of textMatches) {
+            const text = match.slice(1, -1); // Remove quotes
+            if (text.length > 3 && text.length < 500 && !/^\+?\d+$/.test(text)) {
+              messageText = text;
+              console.log(`📝 Found text in JSON: ${messageText}`);
+              break;
             }
           }
-          return null;
-        };
-        
-        const fallbackText = findAnyText(data);
-        if (fallbackText) {
-          console.log('🔧 Found fallback text:', fallbackText);
-          messageText = fallbackText;
         }
       }
       
-      if (!senderPhone) {
-        console.error('❌ NO SENDER PHONE FOUND!');
-        console.log('🔍 Trying to find any phone-like content...');
+      // Validation and processing
+      if (messageText && senderPhone) {
+        console.log('✅ SUCCESS! Found both message and phone');
         
-        // Look for any numeric string that could be a phone
-        const findAnyPhone = (obj) => {
-          if (typeof obj === 'string' && /^\+?\d{10,15}$/.test(obj.replace(/\s+/g, ''))) {
-            return obj;
-          }
-          if (typeof obj === 'object' && obj !== null) {
-            for (const value of Object.values(obj)) {
-              const result = findAnyPhone(value);
-              if (result) return result;
-            }
-          }
-          return null;
+        const formattedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`;
+        
+        const newMsg = {
+          id: messageId || (Date.now() + Math.random()),
+          from: formattedPhone,
+          to: 'business',
+          text: messageText,
+          timestamp: timestamp,
+          type: 'received',
+          status: 'delivered',
+          contact_name: senderName || formattedPhone
         };
         
-        const fallbackPhone = findAnyPhone(data);
-        if (fallbackPhone) {
-          console.log('🔧 Found fallback phone:', fallbackPhone);
-          senderPhone = fallbackPhone;
+        console.log('🚀 CREATING MESSAGE:', newMsg);
+        
+        // Update window debug info
+        if (typeof window !== 'undefined') {
+          (window as any).lastProcessedData.processed = true;
+          (window as any).lastProcessedData.extractedMessage = newMsg;
         }
-      }
-      
-      if (!messageText || !senderPhone) {
-        console.error('❌ CRITICAL: Missing required data after all attempts');
+        
+        // Add message
+        setMessages(prev => {
+          const updated = [...prev, newMsg];
+          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+          console.log('💾 Messages saved, total count:', updated.length);
+          return updated;
+        });
+        
+        // Add/update chat
+        const chatUpdate = {
+          id: formattedPhone,
+          name: senderName || formattedPhone,
+          phone: formattedPhone,
+          lastMessage: messageText,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          unread: 1,
+          avatar: (senderName || formattedPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+          online: true
+        };
+        
+        console.log('💬 UPDATING CHAT:', chatUpdate);
+        addOrUpdateChat(chatUpdate);
+        
+        toast.success(`📨 New message from ${senderName || formattedPhone}: ${messageText.substring(0, 50)}...`);
+        console.log('🎉 ===== MESSAGE PROCESSING COMPLETE =====');
+        
+      } else {
+        console.error('❌ FAILED TO EXTRACT REQUIRED DATA');
         console.error(`❌ messageText: "${messageText}"`);
         console.error(`❌ senderPhone: "${senderPhone}"`);
-        toast.error('⚠️ Received invalid message data - cannot process');
-        return;
+        console.error('❌ Raw data was:', data);
+        
+        // Still show a notification so user knows something came through
+        toast.error(`⚠️ Received data but couldn't parse message. Check console for details.`);
+        
+        // Save failed parsing attempt for debugging
+        if (typeof window !== 'undefined') {
+          if (!(window as any).failedParsingAttempts) {
+            (window as any).failedParsingAttempts = [];
+          }
+          (window as any).failedParsingAttempts.push({
+            data,
+            timestamp: new Date().toISOString(),
+            extractedText: messageText,
+            extractedPhone: senderPhone
+          });
+        }
       }
-      
-      const formattedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`;
-      
-      const newMsg = {
-        id: messageId || (Date.now() + Math.random()),
-        from: formattedPhone,
-        to: 'business',
-        text: messageText,
-        timestamp: timestamp,
-        type: 'received',
-        status: 'delivered',
-        contact_name: senderName || formattedPhone
-      };
-      
-      console.log('🚀 CREATING NEW MESSAGE:', newMsg);
-      
-      // Add message
-      setMessages(prev => {
-        const updated = [...prev, newMsg];
-        localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-        console.log('💾 Saved messages to localStorage, total:', updated.length);
-        return updated;
-      });
-      
-      // Add/update chat
-      const chatUpdate = {
-        id: formattedPhone,
-        name: senderName || formattedPhone,
-        phone: formattedPhone,
-        lastMessage: messageText,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        unread: 1,
-        avatar: (senderName || formattedPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-        online: true
-      };
-      
-      console.log('💬 UPDATING CHAT:', chatUpdate);
-      addOrUpdateChat(chatUpdate);
-      
-      toast.success(`📨 New message from ${senderName || formattedPhone}: ${messageText.substring(0, 50)}...`);
-      console.log('🎉 ===== MESSAGE PROCESSING COMPLETE =====');
       
     } catch (error) {
       console.error('💥 CRITICAL ERROR processing message:', error);
       console.error('💥 Stack trace:', error.stack);
+      console.error('💥 Original data:', data);
       toast.error(`❌ Error processing message: ${error.message}`);
     }
   }, [addOrUpdateChat]);
 
-  // Set up message subscription with comprehensive event handling
+  // Set up message subscription when connected
   useEffect(() => {
     if (isConnected) {
-      console.log('🔌 Pusher connected - setting up message subscription...');
+      console.log('🔌 Pusher connected - setting up ultra-comprehensive message subscription...');
       subscribeToMessages(handleIncomingMessage);
       
-      // Also listen for test messages
+      // Test event listener for debugging
       const handleTestMessage = (event) => {
         console.log('🧪 Test message received:', event.detail);
         handleIncomingMessage(event.detail);

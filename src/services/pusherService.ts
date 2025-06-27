@@ -1,4 +1,3 @@
-
 import Pusher from 'pusher-js';
 
 class PusherService {
@@ -94,7 +93,7 @@ class PusherService {
           this.handleReconnect();
         }
       }
-    }, 15000); // Check every 15 seconds
+    }, 15000);
   }
 
   private handleReconnect() {
@@ -104,7 +103,7 @@ class PusherService {
 
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      const delay = Math.min(2000 * this.reconnectAttempts, 30000); // Max 30 seconds
+      const delay = Math.min(2000 * this.reconnectAttempts, 30000);
       console.log(`🔄 Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`);
       
       setTimeout(() => {
@@ -139,138 +138,131 @@ class PusherService {
   }
 
   subscribeToMessages(callback: (data: any) => void) {
-    console.log('📨 Setting up COMPREHENSIVE webhook message subscription...');
+    console.log('🚀 ===== SETTING UP ULTRA-COMPREHENSIVE MESSAGE RECEPTION =====');
     this.messageCallback = callback;
     
     if (this.channel) {
-      // COMPREHENSIVE list of ALL possible WhatsApp webhook event names
+      // SUPER COMPREHENSIVE list of ALL possible event names
       const eventTypes = [
-        // Standard WhatsApp webhook events
-        'messages',
-        'messages.received',
-        'message.received',
-        'message_received',
-        'incoming_message',
-        'incoming-message',
-        'new_message',
-        'new-message',
-        'whatsapp_message',
-        'whatsapp-message',
-        'whatsapp.message',
-        
-        // Generic webhook events
-        'webhook',
-        'webhook_data',
-        'webhook-data',
-        'webhook.data',
-        'webhook_received',
-        'webhook-received',
-        'webhook.received',
-        
-        // Cloud API events
-        'cloud_api',
-        'cloud-api',
-        'cloud.api',
-        'cloud_api_webhook',
-        'cloud-api-webhook',
-        'cloud.api.webhook',
-        
-        // Meta/Facebook events
-        'meta_webhook',
-        'meta-webhook',
-        'meta.webhook',
-        'facebook_webhook',
-        'facebook-webhook',
-        'facebook.webhook',
-        
-        // FastWAPI specific events
-        'fastwapi',
-        'fastwapi_message',
-        'fastwapi-message',
-        'fastwapi.message',
-        'fastwapi_webhook',
-        'fastwapi-webhook',
-        'fastwapi.webhook',
-        
-        // Generic message events
-        'message',
-        'message_event',
-        'message-event',
-        'message.event',
-        'msg',
-        'msg_received',
-        'msg-received',
-        'msg.received',
-        
-        // Data events
-        'data',
-        'data_received',
-        'data-received',
-        'data.received',
-        'payload',
-        'event_data',
-        'event-data',
-        'event.data',
-        
-        // Notification events
-        'notification',
-        'notification_received',
-        'notification-received',
-        'notification.received',
-        
-        // Business API events
-        'business_message',
-        'business-message',
-        'business.message',
-        'wa_business_message',
-        'wa-business-message',
-        'wa.business.message'
+        // Standard webhook events
+        'messages', 'message', 'msg', 'webhook', 'data', 'event',
+        'messages.received', 'message.received', 'message_received',
+        'incoming_message', 'incoming-message', 'new_message', 'new-message',
+        'whatsapp_message', 'whatsapp-message', 'whatsapp.message',
+        'webhook_data', 'webhook-data', 'webhook.data',
+        'webhook_received', 'webhook-received', 'webhook.received',
+        'cloud_api', 'cloud-api', 'cloud.api',
+        'meta_webhook', 'meta-webhook', 'meta.webhook',
+        'facebook_webhook', 'facebook-webhook', 'facebook.webhook',
+        'fastwapi', 'fastwapi_message', 'fastwapi-message', 'fastwapi.message',
+        'fastwapi_webhook', 'fastwapi-webhook', 'fastwapi.webhook',
+        'message_event', 'message-event', 'message.event',
+        'msg_received', 'msg-received', 'msg.received',
+        'data_received', 'data-received', 'data.received',
+        'payload', 'event_data', 'event-data', 'event.data',
+        'notification', 'notification_received', 'notification-received',
+        'business_message', 'business-message', 'business.message',
+        'wa_business_message', 'wa-business-message', 'wa.business.message',
+        // Additional patterns that might be used
+        'webhook.notification', 'webhook_notification', 'webhook-notification',
+        'api.webhook', 'api_webhook', 'api-webhook',
+        'receive', 'received', 'inbound', 'incoming',
+        'chat', 'chat_message', 'chat-message', 'chat.message',
+        'text', 'text_message', 'text-message', 'text.message',
+        'update', 'status_update', 'status-update', 'status.update'
       ];
 
+      console.log(`🎯 Binding to ${eventTypes.length} different event types...`);
+      
       let boundEvents = 0;
       eventTypes.forEach(eventType => {
         try {
           this.channel.bind(eventType, (data: any) => {
-            console.log(`🔥 ===== WEBHOOK EVENT RECEIVED =====`);
+            console.log(`🔥🔥🔥 ===== WEBHOOK EVENT RECEIVED =====`);
             console.log(`🔥 Event Type: "${eventType}"`);
-            console.log(`🔥 Event Data:`, JSON.stringify(data, null, 2));
+            console.log(`🔥 Raw Data:`, data);
+            console.log(`🔥 Data Type:`, typeof data);
+            console.log(`🔥 Data Keys:`, Object.keys(data || {}));
+            console.log(`🔥 JSON Data:`, JSON.stringify(data, null, 2));
             console.log(`🔥 Timestamp:`, new Date().toISOString());
-            console.log(`🔥 =================================`);
+            console.log(`🔥🔥🔥 =================================`);
+            
+            // Log to window for debugging
+            if (typeof window !== 'undefined') {
+              (window as any).lastReceivedEvent = {
+                eventType,
+                data,
+                timestamp: new Date().toISOString()
+              };
+              console.log('💾 Event saved to window.lastReceivedEvent for debugging');
+            }
             
             if (this.messageCallback) {
               this.messageCallback(data);
             }
           });
           boundEvents++;
-          console.log(`📨 ✅ Bound to event: "${eventType}"`);
         } catch (error) {
-          console.error(`📨 ❌ Failed to bind to event "${eventType}":`, error);
+          console.error(`❌ Failed to bind to event "${eventType}":`, error);
         }
       });
       
-      console.log(`📨 🎯 Successfully bound to ${boundEvents}/${eventTypes.length} webhook event types`);
+      console.log(`✅ Successfully bound to ${boundEvents}/${eventTypes.length} webhook event types`);
       
-      // Also bind to catch-all events just in case
+      // ULTRA-AGGRESSIVE: Bind to ALL possible events with global catcher
       try {
         this.channel.bind_global((eventName: string, data: any) => {
-          console.log(`🌐 GLOBAL EVENT CAUGHT: "${eventName}"`, data);
+          console.log(`🌍🌍🌍 ===== GLOBAL EVENT INTERCEPTED =====`);
+          console.log(`🌍 Event Name: "${eventName}"`);
+          console.log(`🌍 Event Data:`, data);
+          console.log(`🌍 Data Type:`, typeof data);
+          console.log(`🌍 JSON:`, JSON.stringify(data, null, 2));
+          console.log(`🌍 Timestamp:`, new Date().toISOString());
+          console.log(`🌍🌍🌍 ===================================`);
           
-          // If it's not one of our known events, still try to process it
-          if (!eventTypes.includes(eventName)) {
-            console.log(`🆕 Unknown event type "${eventName}" - attempting to process anyway`);
-            if (this.messageCallback) {
-              this.messageCallback(data);
+          // Save ALL events for debugging
+          if (typeof window !== 'undefined') {
+            if (!(window as any).allReceivedEvents) {
+              (window as any).allReceivedEvents = [];
             }
+            (window as any).allReceivedEvents.push({
+              eventName,
+              data,
+              timestamp: new Date().toISOString()
+            });
+            
+            // Keep only last 50 events
+            if ((window as any).allReceivedEvents.length > 50) {
+              (window as any).allReceivedEvents = (window as any).allReceivedEvents.slice(-50);
+            }
+            
+            console.log(`💾 Event saved to window.allReceivedEvents (${(window as any).allReceivedEvents.length} total)`);
+          }
+          
+          // Process ANY event through our message handler
+          if (this.messageCallback) {
+            console.log(`🔄 Processing global event "${eventName}" through message handler...`);
+            this.messageCallback(data);
           }
         });
-        console.log(`📨 🌐 Global event catcher enabled`);
+        console.log(`🌍 ✅ GLOBAL EVENT CATCHER ACTIVATED - Will catch ANY event sent to this channel`);
       } catch (error) {
         console.error('❌ Failed to set up global event catcher:', error);
       }
       
+      // Log channel state
+      console.log('📡 Channel State:', {
+        name: this.channel.name,
+        subscribed: this.channel.subscribed,
+        subscription_pending: this.channel.subscription_pending,
+        subscription_cancelled: this.channel.subscription_cancelled
+      });
+      
     } else {
-      console.warn('⚠️ Cannot subscribe - no channel available');
+      console.error('❌ NO CHANNEL AVAILABLE - Cannot subscribe to messages!');
     }
+    
+    console.log('🚀 ===== MESSAGE RECEPTION SETUP COMPLETE =====');
   }
 
   unsubscribeFromMessages() {
@@ -298,7 +290,6 @@ class PusherService {
     };
   }
 
-  // Force reconnect method
   forceReconnect() {
     console.log('🔄 Forcing reconnection...');
     this.reconnectAttempts = 0;
