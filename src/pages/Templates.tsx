@@ -1,13 +1,17 @@
+
 import React, { useState, useEffect } from 'react';
 import { Send, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { databaseService } from '../services/databaseService';
-import { backendService } from '../services/backendService';
+import { whatsappService } from '../services/whatsappService';
 
 const Templates = () => {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [templates, setTemplates] = useState([]);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+  const [isSending, setIsSending] = useState(false);
 
   // Load templates from localStorage on component mount
   useEffect(() => {
@@ -27,20 +31,17 @@ const Templates = () => {
     try {
       const settings = databaseService.getSettings();
       
-      if (!settings?.backendUrl) {
-        toast.error('Please configure your FastWAPI backend URL in Settings first');
+      if (!settings?.accessToken || !settings?.businessId) {
+        toast.error('Please configure your WhatsApp Business API credentials in Settings first');
         setIsSyncing(false);
         return;
       }
 
-      console.log('Using backend URL for sync:', settings.backendUrl);
+      console.log('Using WhatsApp Business API for sync');
       
-      const syncedTemplates = await backendService.syncTemplates();
+      const syncedTemplates = await whatsappService.syncTemplates();
       
       setTemplates(syncedTemplates);
-      
-      // Save to localStorage
-      localStorage.setItem('whatsapp-templates', JSON.stringify(syncedTemplates));
       
       if (syncedTemplates.length > 0) {
         toast.success(`${syncedTemplates.length} templates synced successfully!`);
@@ -52,6 +53,40 @@ const Templates = () => {
       toast.error(`Failed to sync templates: ${error.message}`);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleVariableChange = (variableName: string, value: string) => {
+    setTemplateVariables(prev => ({
+      ...prev,
+      [variableName]: value
+    }));
+  };
+
+  const handleSendTemplate = async () => {
+    if (!selectedTemplate || !phoneNumber.trim()) {
+      toast.error('Please select a template and enter a phone number');
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      await whatsappService.sendTemplateMessage(
+        selectedTemplate.name,
+        phoneNumber,
+        templateVariables
+      );
+      
+      toast.success('Template message sent successfully!');
+      
+      // Clear form
+      setPhoneNumber('');
+      setTemplateVariables({});
+    } catch (error: any) {
+      console.error('Send error:', error);
+      toast.error(`Failed to send template: ${error.message}`);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -88,13 +123,16 @@ const Templates = () => {
             {templates.length === 0 ? (
               <div className="p-6 text-center text-gray-500">
                 <p>No templates available</p>
-                <p className="text-sm">Click "Sync Templates" to load your templates from your FastWAPI backend</p>
+                <p className="text-sm">Click "Sync Templates" to load your templates from WhatsApp Business API</p>
               </div>
             ) : (
               templates.map((template) => (
                 <div
                   key={template.id}
-                  onClick={() => setSelectedTemplate(template)}
+                  onClick={() => {
+                    setSelectedTemplate(template);
+                    setTemplateVariables({});
+                  }}
                   className={`p-6 cursor-pointer hover:bg-gray-50 ${
                     selectedTemplate?.id === template.id ? 'bg-green-50 border-l-4 border-green-600' : ''
                   }`}
@@ -140,6 +178,8 @@ const Templates = () => {
                           <input
                             type="text"
                             placeholder={`Enter ${variable.replace('_', ' ')}`}
+                            value={templateVariables[variable] || ''}
+                            onChange={(e) => handleVariableChange(variable, e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
                           />
                         </div>
@@ -149,35 +189,23 @@ const Templates = () => {
                 )}
 
                 <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Send To</label>
-                  <div className="space-y-2">
-                    <label className="flex items-center">
-                      <input type="radio" name="recipient" value="single" className="mr-2" defaultChecked />
-                      <span className="text-sm text-gray-900">Single Customer</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input type="radio" name="recipient" value="group" className="mr-2" />
-                      <span className="text-sm text-gray-900">Customer Group</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input type="radio" name="recipient" value="all" className="mr-2" />
-                      <span className="text-sm text-gray-900">All Customers</span>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Customer Phone Number</label>
                   <input
                     type="tel"
                     placeholder="+1234567890"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
                 </div>
 
-                <button className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
+                <button 
+                  onClick={handleSendTemplate}
+                  disabled={isSending || !phoneNumber.trim()}
+                  className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
                   <Send className="h-4 w-4" />
-                  Send Template Message
+                  {isSending ? 'Sending...' : 'Send Template Message'}
                 </button>
               </div>
             </>

@@ -1,12 +1,19 @@
+
 import React, { useState, useEffect } from 'react';
 import { Save, TestTube, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { pusherService } from '../services/pusherService';
+import { whatsappService } from '../services/whatsappService';
 import { databaseService } from '../services/databaseService';
 import TestMessage from '../components/TestMessage';
 
 const Settings = () => {
   const [settings, setSettings] = useState({
+    accessToken: '',
+    businessId: '',
+    phoneNumberId: '',
+    webhookVerifyToken: '',
+    backendUrl: '',
     pusherAppId: '2012752',
     pusherKey: '490510485d3b7c3874d4',
     pusherSecret: 'bdafa26e3b3d42f53d5c',
@@ -14,7 +21,8 @@ const Settings = () => {
   });
 
   const [connectionStatus, setConnectionStatus] = useState({
-    pusher: false
+    pusher: false,
+    whatsapp: false
   });
 
   const [saving, setSaving] = useState(false);
@@ -36,15 +44,15 @@ const Settings = () => {
       setSettings(prevSettings => ({ ...prevSettings, ...initialSettings }));
     }
 
-    // Check Pusher connection
-    const checkPusherConnection = () => {
+    // Check connections
+    const checkConnections = () => {
       setConnectionStatus(prev => ({
         ...prev,
         pusher: pusherService.isConnected()
       }));
     };
 
-    const connectionInterval = setInterval(checkPusherConnection, 2000);
+    const connectionInterval = setInterval(checkConnections, 2000);
 
     return () => {
       clearInterval(connectionInterval);
@@ -80,14 +88,86 @@ const Settings = () => {
     }
   };
 
+  const testWhatsAppConnection = async () => {
+    try {
+      await whatsappService.testConnection();
+      setConnectionStatus(prev => ({ ...prev, whatsapp: true }));
+      toast.success('WhatsApp Business API connection successful!');
+    } catch (error: any) {
+      console.error('WhatsApp test error:', error);
+      setConnectionStatus(prev => ({ ...prev, whatsapp: false }));
+      toast.error(`WhatsApp API connection failed: ${error.message}`);
+    }
+  };
+
   return (
     <div className="p-4 md:p-8">
       <div className="mb-8">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-600 mt-2">Configure your real-time messaging settings</p>
+        <p className="text-gray-600 mt-2">Configure your WhatsApp Business API and real-time messaging settings</p>
       </div>
 
       <div className="space-y-6">
+        {/* WhatsApp Business API Settings */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+            <h3 className="text-lg font-semibold text-gray-900">WhatsApp Business API</h3>
+            <button
+              onClick={testWhatsAppConnection}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
+            >
+              <TestTube className="h-4 w-4" />
+              Test WhatsApp API
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Access Token</label>
+              <input
+                type="password"
+                name="accessToken"
+                value={settings.accessToken}
+                onChange={handleInputChange}
+                placeholder="WhatsApp Business API Access Token"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Business ID</label>
+              <input
+                type="text"
+                name="businessId"
+                value={settings.businessId}
+                onChange={handleInputChange}
+                placeholder="WhatsApp Business Account ID"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number ID</label>
+              <input
+                type="text"
+                name="phoneNumberId"
+                value={settings.phoneNumberId}
+                onChange={handleInputChange}
+                placeholder="WhatsApp Business Phone Number ID"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Webhook Verify Token</label>
+              <input
+                type="text"
+                name="webhookVerifyToken"
+                value={settings.webhookVerifyToken}
+                onChange={handleInputChange}
+                placeholder="Webhook verification token"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Pusher Settings */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
@@ -162,7 +242,20 @@ const Settings = () => {
         {/* Connection Status */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Connection Status</h3>
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`p-4 rounded-lg border ${connectionStatus.whatsapp ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+              <div className="flex items-center">
+                {connectionStatus.whatsapp ? (
+                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                ) : (
+                  <XCircle className="h-5 w-5 text-red-600 mr-2" />
+                )}
+                <span className={`text-sm font-medium ${connectionStatus.whatsapp ? 'text-green-800' : 'text-red-800'}`}>WhatsApp Business API</span>
+              </div>
+              <p className={`text-xs mt-1 ${connectionStatus.whatsapp ? 'text-green-600' : 'text-red-600'}`}>
+                {connectionStatus.whatsapp ? 'Connected and ready' : 'Not connected'}
+              </p>
+            </div>
             <div className={`p-4 rounded-lg border ${connectionStatus.pusher ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
               <div className="flex items-center">
                 {connectionStatus.pusher ? (
@@ -181,33 +274,6 @@ const Settings = () => {
 
         {/* Test Message System */}
         <TestMessage />
-
-        {/* Integration Instructions */}
-        <div className="mt-8 bg-blue-50 rounded-lg border border-blue-200 p-4 md:p-6">
-          <h3 className="text-lg font-semibold text-blue-900 mb-4">FastWAPI Integration</h3>
-          <div className="space-y-3 text-sm text-blue-800">
-            <p><strong>Configure your FastWAPI backend to send messages via Pusher:</strong></p>
-            <pre className="bg-blue-100 p-3 rounded text-xs overflow-x-auto">
-{`# Python example for FastWAPI
-import pusher
-
-pusher_client = pusher.Pusher(
-    app_id='${settings.pusherAppId}',
-    key='${settings.pusherKey}',
-    secret='${settings.pusherSecret}',
-    cluster='${settings.pusherCluster}',
-    ssl=True
-)
-
-# Send message to app
-pusher_client.trigger('fastwapi-channel', 'message-event', {
-    'message': 'Hello from WhatsApp!',
-    'from': '+1234567890',
-    'contact_name': 'Customer Name'
-})`}
-            </pre>
-          </div>
-        </div>
       </div>
     </div>
   );

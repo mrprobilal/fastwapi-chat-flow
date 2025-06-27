@@ -1,6 +1,7 @@
 
 class DatabaseService {
   private settings: any = null;
+  private settingsChangeListeners: ((settings: any) => void)[] = [];
 
   initializeSettings() {
     try {
@@ -15,7 +16,7 @@ class DatabaseService {
           businessId: '',
           phoneNumberId: '',
           webhookVerifyToken: '',
-          backendUrl: '', // Add backend URL to default settings
+          backendUrl: '',
           pusherAppId: '',
           pusherKey: '',
           pusherSecret: '',
@@ -50,14 +51,53 @@ class DatabaseService {
   updateSettings(newSettings: any) {
     this.settings = { ...this.settings, ...newSettings };
     this.saveSettings();
+    this.notifySettingsChange();
     console.log('💾 Settings updated');
   }
 
-  private saveSettings() {
+  saveSettings(newSettings?: any) {
+    if (newSettings) {
+      this.settings = { ...this.settings, ...newSettings };
+    }
     try {
       localStorage.setItem('whatsapp-settings', JSON.stringify(this.settings));
+      this.notifySettingsChange();
     } catch (error) {
       console.error('❌ Error saving settings:', error);
+    }
+  }
+
+  onSettingsChange(callback: (settings: any) => void) {
+    this.settingsChangeListeners.push(callback);
+    // Return unsubscribe function
+    return () => {
+      this.settingsChangeListeners = this.settingsChangeListeners.filter(
+        listener => listener !== callback
+      );
+    };
+  }
+
+  private notifySettingsChange() {
+    this.settingsChangeListeners.forEach(listener => {
+      listener(this.settings);
+    });
+  }
+
+  getLastSyncTime() {
+    try {
+      const syncTime = localStorage.getItem('whatsapp-last-sync');
+      return syncTime ? new Date(syncTime) : null;
+    } catch (error) {
+      console.error('❌ Error getting last sync time:', error);
+      return null;
+    }
+  }
+
+  setLastSyncTime(time: Date) {
+    try {
+      localStorage.setItem('whatsapp-last-sync', time.toISOString());
+    } catch (error) {
+      console.error('❌ Error setting last sync time:', error);
     }
   }
 
