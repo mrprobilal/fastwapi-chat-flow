@@ -101,6 +101,7 @@ const Messages = () => {
 
         setApiStatus({ connected: response.ok, checking: false });
       } catch (error) {
+        console.error('API status check failed:', error);
         setApiStatus({ connected: false, checking: false });
       }
     };
@@ -154,11 +155,11 @@ const Messages = () => {
     loadTemplates();
   }, []);
 
-  // Load messages from fastwapi.com and localStorage
+  // Load messages and chats from localStorage only
   useEffect(() => {
-    const loadMessages = async () => {
+    const loadStoredData = () => {
       try {
-        // Always load from localStorage first
+        // Load messages from localStorage
         const savedMessages = localStorage.getItem('whatsapp-messages');
         const savedChats = localStorage.getItem('whatsapp-chats');
         
@@ -167,6 +168,7 @@ const Messages = () => {
           console.log('Loaded messages from localStorage:', parsedMessages);
           setMessages(parsedMessages);
         }
+        
         if (savedChats) {
           const parsedChats = JSON.parse(savedChats);
           console.log('Loaded chats from localStorage:', parsedChats);
@@ -178,87 +180,12 @@ const Messages = () => {
             localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicatedChats));
           }
         }
-
-        // Try to fetch from FastWAPI if settings are available
-        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
-        if (settings.accessToken) {
-          console.log('Fetching messages from FastWAPI...');
-          const response = await fetch('https://fastwapi.com/api/messages', {
-            headers: {
-              'Authorization': `Bearer ${settings.accessToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            console.log('Messages from FastWAPI:', data);
-            
-            if (data.messages && data.messages.length > 0) {
-              // Process and store messages
-              const processedMessages = data.messages.map(msg => ({
-                id: msg.id || Date.now() + Math.random(),
-                from: msg.from,
-                to: msg.to,
-                text: msg.text || msg.body,
-                timestamp: msg.timestamp,
-                type: msg.from === 'business' ? 'sent' : 'received',
-                status: 'delivered',
-                contact_name: msg.contact_name
-              }));
-
-              setMessages(processedMessages);
-              localStorage.setItem('whatsapp-messages', JSON.stringify(processedMessages));
-              
-              // Create chats from messages
-              const uniqueChats = new Map();
-              
-              processedMessages.forEach(msg => {
-                if (msg.from && msg.from !== 'business') {
-                  const normalizedPhone = normalizePhoneNumber(msg.from);
-                  if (!uniqueChats.has(normalizedPhone)) {
-                    uniqueChats.set(normalizedPhone, {
-                      id: msg.from,
-                      name: msg.contact_name || msg.from,
-                      phone: msg.from,
-                      lastMessage: msg.text || 'Media',
-                      time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                      unread: 0,
-                      avatar: (msg.contact_name || msg.from).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-                      online: false
-                    });
-                  } else {
-                    // Update with latest message
-                    const existing = uniqueChats.get(normalizedPhone);
-                    if (new Date(msg.timestamp) > new Date(existing.timestamp || 0)) {
-                      uniqueChats.set(normalizedPhone, {
-                        ...existing,
-                        lastMessage: msg.text || 'Media',
-                        time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                        timestamp: msg.timestamp
-                      });
-                    }
-                  }
-                }
-              });
-              
-              const chatsList = Array.from(uniqueChats.values());
-              const deduplicatedChats = deduplicateChats(chatsList);
-              setChats(deduplicatedChats);
-              localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicatedChats));
-            }
-          }
-        }
       } catch (error) {
-        console.error('Error loading messages:', error);
+        console.error('Error loading stored data:', error);
       }
     };
 
-    loadMessages();
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(loadMessages, 30000);
-    return () => clearInterval(interval);
+    loadStoredData();
   }, []);
 
   // Handle selected customer from navigation
@@ -293,18 +220,22 @@ const Messages = () => {
     }
   }, [location.state]);
 
-  // Enhanced message receiving with better handling
+  // Enhanced message receiving with better debugging
   useEffect(() => {
     const handleIncomingMessage = (data) => {
-      console.log('New message received via Pusher:', data);
+      console.log('📨 Raw Pusher event received:', data);
+      console.log('📨 Event type:', typeof data, 'Keys:', Object.keys(data || {}));
       
       // Handle different data structures from webhook
       const messageText = data.message || data.text || data.body || data.content;
       const senderPhone = data.from || data.phone || data.sender;
       const senderName = data.contact_name || data.name || data.contact;
       
+      console.log('📨 Extracted data:', { messageText, senderPhone, senderName });
+      
       if (!messageText || !senderPhone) {
-        console.warn('Invalid message data received:', data);
+        console.warn('❌ Invalid message data received:', data);
+        toast.error('Received invalid message data');
         return;
       }
       
@@ -319,11 +250,12 @@ const Messages = () => {
         contact_name: senderName
       };
       
-      console.log('Processing incoming message:', newMsg);
+      console.log('✅ Processing incoming message:', newMsg);
       
       setMessages(prev => {
         const updated = [...prev, newMsg];
         localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+        console.log('💾 Messages saved to localStorage, total:', updated.length);
         return updated;
       });
       
@@ -341,16 +273,21 @@ const Messages = () => {
         };
         
         addOrUpdateChat(chatUpdate);
+        console.log('💬 Chat updated:', chatUpdate);
       }
       
-      toast.success(`New message from ${senderName || senderPhone}!`);
+      toast.success(`📨 New message from ${senderName || senderPhone}!`);
     };
 
     if (isConnected) {
+      console.log('🔌 Pusher connected, subscribing to messages...');
       subscribeToMessages(handleIncomingMessage);
+    } else {
+      console.log('❌ Pusher not connected, cannot subscribe to messages');
     }
 
     return () => {
+      console.log('🔌 Unsubscribing from messages...');
       unsubscribeFromMessages();
     };
   }, [isConnected, subscribeToMessages, unsubscribeFromMessages, selectedChat]);
@@ -678,7 +615,9 @@ const Messages = () => {
             <div className="p-4 text-center text-gray-500">
               <MessageSquare className="h-12 w-12 mx-auto mb-2 text-gray-300" />
               <p>No conversations yet</p>
-              <p className="text-xs">Messages will appear here when you receive them</p>
+              <p className="text-xs">
+                {isConnected ? 'Ready to receive messages' : 'Waiting for Pusher connection...'}
+              </p>
             </div>
           ) : (
             chats.map((chat) => (
@@ -767,7 +706,9 @@ const Messages = () => {
               <div className="p-4 text-center text-gray-500">
                 <MessageSquare className="h-12 w-12 mx-auto mb-2 text-gray-300" />
                 <p>No conversations yet</p>
-                <p className="text-xs">Messages will appear here when you receive them</p>
+                <p className="text-xs">
+                  {isConnected ? 'Ready to receive messages' : 'Waiting for Pusher connection...'}
+                </p>
               </div>
             ) : (
               chats.map((chat) => (
@@ -943,6 +884,23 @@ const Messages = () => {
                 <MessageSquare className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-xl font-medium text-gray-900 mb-2">Welcome to WhatsApp Business</h3>
                 <p className="text-gray-600">Select a chat to start messaging your customers</p>
+                <div className="mt-4 flex items-center justify-center space-x-4 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className="text-gray-600">
+                      Pusher: {isConnected ? 'Ready' : 'Connecting...'}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className={`h-2 w-2 rounded-full ${
+                      apiStatus.checking ? 'bg-yellow-500' : 
+                      apiStatus.connected ? 'bg-green-500' : 'bg-red-500'
+                    }`}></div>
+                    <span className="text-gray-600">
+                      WhatsApp: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Ready' : 'Setup needed'}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
