@@ -1,4 +1,5 @@
 
+
 import { databaseService } from './databaseService';
 import { toast } from 'sonner';
 
@@ -54,7 +55,7 @@ class SettingsSyncService {
     // Start new interval
     this.syncInterval = setInterval(async () => {
       try {
-        await this.syncSettings();
+        await this.performSync(false); // false = don't show toast for auto sync
       } catch (error) {
         console.error('Auto sync failed:', error);
       }
@@ -73,24 +74,34 @@ class SettingsSyncService {
 
   // Manually sync settings from fastwapi.com
   async syncSettings() {
+    return await this.performSync(true); // true = show toast for manual sync
+  }
+
+  // Core sync logic used by both manual and auto sync
+  private async performSync(showToast: boolean = false) {
     if (!this.isEnabled || !this.syncUrl) {
       throw new Error('Sync not configured');
     }
 
     try {
+      console.log('Attempting to sync from:', this.syncUrl);
+      
       const response = await fetch(this.syncUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json'
-        }
+        },
+        // Add timeout and other fetch options for better reliability
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       });
 
       if (!response.ok) {
-        throw new Error(`Sync failed: HTTP ${response.status}`);
+        throw new Error(`Sync failed: HTTP ${response.status} - ${response.statusText}`);
       }
 
       const remoteSettings = await response.json();
+      console.log('Received settings from fastwapi.com:', remoteSettings);
       
       // Check if settings have changed
       const currentSettings = databaseService.getSettings();
@@ -108,15 +119,32 @@ class SettingsSyncService {
         await databaseService.saveSettings(mergedSettings);
         
         console.log('Settings synced from fastwapi.com:', remoteSettings);
-        toast.success('Settings synchronized from fastwapi.com');
+        if (showToast) {
+          toast.success('Settings synchronized from fastwapi.com');
+        }
         
         return true;
       } else {
         console.log('No settings changes detected');
+        if (showToast) {
+          toast.success('Settings are already up to date');
+        }
         return false;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Settings sync failed:', error);
+      
+      // Only show error toast for manual sync
+      if (showToast) {
+        if (error.name === 'AbortError') {
+          toast.error('Sync timeout - please check your connection');
+        } else if (error.message.includes('Failed to fetch')) {
+          toast.error('Cannot connect to fastwapi.com - please check your sync URL');
+        } else {
+          toast.error(`Sync failed: ${error.message}`);
+        }
+      }
+      
       throw error;
     }
   }
@@ -153,3 +181,4 @@ class SettingsSyncService {
 }
 
 export const settingsSyncService = new SettingsSyncService();
+
