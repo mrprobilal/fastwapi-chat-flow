@@ -138,7 +138,7 @@ const Messages = () => {
   // Enhanced message receiving
   useEffect(() => {
     const handleIncomingMessage = (data) => {
-      console.log('📨 Raw Pusher event received:', data);
+      console.log('📨 Raw incoming message data:', data);
       
       const messageText = data.message || data.text || data.body || data.content;
       const senderPhone = data.from || data.phone || data.sender;
@@ -185,20 +185,23 @@ const Messages = () => {
           online: true
         };
         
+        console.log('💬 Adding/updating chat:', chatUpdate);
         addOrUpdateChat(chatUpdate);
-        console.log('💬 Chat updated:', chatUpdate);
       }
       
       toast.success(`📨 New message from ${senderName || senderPhone}!`);
     };
 
-    // Listen for test messages
+    // Listen for test messages from the test component
     const handleTestMessage = (event) => {
+      console.log('🧪 Test message event received:', event.detail);
       handleIncomingMessage(event.detail);
     };
 
+    // Set up event listeners
     window.addEventListener('test-pusher-message', handleTestMessage);
 
+    // Subscribe to Pusher messages if connected
     if (isConnected) {
       console.log('🔌 Pusher connected, subscribing to messages...');
       subscribeToMessages(handleIncomingMessage);
@@ -207,11 +210,11 @@ const Messages = () => {
     }
 
     return () => {
-      console.log('🔌 Unsubscribing from messages...');
+      console.log('🔌 Cleaning up message subscriptions...');
       window.removeEventListener('test-pusher-message', handleTestMessage);
       unsubscribeFromMessages();
     };
-  }, [isConnected, subscribeToMessages, unsubscribeFromMessages, selectedChat]);
+  }, [isConnected, subscribeToMessages, unsubscribeFromMessages, selectedChat, addOrUpdateChat]);
 
   // Simplified message sending
   const sendMessage = async () => {
