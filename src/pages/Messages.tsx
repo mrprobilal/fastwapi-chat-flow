@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Search, Send, FileText, Paperclip, Smile, ArrowLeft } from 'lucide-react';
 import { useMessages } from '../hooks/useMessages';
@@ -6,6 +5,7 @@ import { toast } from 'sonner';
 import { useLocation } from 'react-router-dom';
 import { useIsMobile } from '../hooks/use-mobile';
 import { whatsappService } from '../services/whatsappService';
+import TestMessage from '../components/TestMessage';
 
 const Messages = () => {
   const location = useLocation();
@@ -14,7 +14,7 @@ const Messages = () => {
   const [newMessage, setNewMessage] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
 
-  // Use the useMessages hook instead of duplicating the logic
+  // Use the useMessages hook
   const { 
     messages, 
     chats, 
@@ -25,6 +25,14 @@ const Messages = () => {
     addOrUpdateChat, 
     normalizePhoneNumber 
   } = useMessages();
+
+  // Debug: Log messages and chats when they change
+  useEffect(() => {
+    console.log('📊 Messages updated:', messages.length, 'messages');
+    console.log('📊 Chats updated:', chats.length, 'chats');
+    console.log('📊 Current messages:', messages);
+    console.log('📊 Current chats:', chats);
+  }, [messages, chats]);
 
   // Helper function to find existing chat by phone number
   const findExistingChat = (phone) => {
@@ -219,10 +227,43 @@ const Messages = () => {
 
   const getSelectedChat = () => chats.find(chat => chat.id === selectedChat);
   const selectedChatData = getSelectedChat();
-  const chatMessages = messages.filter(msg => 
-    (msg.from === selectedChat && msg.type === 'received') || 
-    (msg.to === selectedChat && msg.type === 'sent')
-  );
+  
+  // Fix: Get messages for selected chat properly
+  const chatMessages = messages.filter(msg => {
+    if (!selectedChat) return false;
+    
+    // Check if message is from the selected chat (incoming) or to the selected chat (outgoing)
+    const isFromSelectedChat = (msg.from === selectedChat && msg.type === 'received');
+    const isToSelectedChat = (msg.to === selectedChat && msg.type === 'sent');
+    
+    console.log('🔍 Filtering message:', {
+      messageId: msg.id,
+      messageFrom: msg.from,
+      messageTo: msg.to,
+      messageType: msg.type,
+      selectedChat,
+      isFromSelectedChat,
+      isToSelectedChat,
+      willShow: isFromSelectedChat || isToSelectedChat
+    });
+    
+    return isFromSelectedChat || isToSelectedChat;
+  });
+
+  // Debug: Log filtered messages
+  useEffect(() => {
+    console.log('💬 Chat messages for selected chat:', selectedChat, chatMessages);
+  }, [selectedChat, chatMessages]);
+
+  // Add test message handler
+  const handleTestMessage = (data: any) => {
+    console.log('🧪 Processing test message:', data);
+    // Trigger the message handler directly
+    if (typeof window !== 'undefined') {
+      const event = new CustomEvent('test-pusher-message', { detail: data });
+      window.dispatchEvent(event);
+    }
+  };
 
   // Mobile view - show only chat list or selected chat
   if (isMobile) {
@@ -455,6 +496,7 @@ const Messages = () => {
             <p className="text-sm text-gray-600 hidden md:block">Real-time messaging via Pusher & WhatsApp API</p>
           </div>
           <div className="flex items-center space-x-4">
+            <TestMessage onTestMessage={handleTestMessage} />
             <div className="flex items-center space-x-2">
               <div className={`h-3 w-3 rounded-full ${
                 apiStatus.checking ? 'bg-yellow-500' : 
