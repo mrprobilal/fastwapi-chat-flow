@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Send, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { databaseService } from '../services/databaseService';
+import { whatsappService } from '../services/whatsappService';
 
 const Templates = () => {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -15,68 +17,36 @@ const Templates = () => {
       console.log('Loaded templates from localStorage:', parsedTemplates);
       setTemplates(parsedTemplates);
     }
+
+    // Initialize database service
+    databaseService.initializeSettings();
   }, []);
 
   const handleSyncTemplates = async () => {
     setIsSyncing(true);
     try {
-      // Always get fresh settings from localStorage
-      const settingsString = localStorage.getItem('fastwapi-settings');
-      if (!settingsString) {
-        toast.error('No API settings found. Please configure your settings first.');
+      const settings = databaseService.getSettings();
+      
+      if (!settings?.accessToken || !settings?.businessId) {
+        toast.error('Please configure your WhatsApp API settings in Settings first');
         setIsSyncing(false);
         return;
       }
 
-      const settings = JSON.parse(settingsString);
       console.log('Using settings for sync:', { businessId: settings.businessId, hasToken: !!settings.accessToken });
       
-      if (!settings.accessToken || !settings.businessId) {
-        toast.error('Please configure your WhatsApp API settings first');
-        setIsSyncing(false);
-        return;
-      }
-
-      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}/message_templates`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${settings.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      console.log('Templates sync response status:', response.status);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Templates synced:', data);
-        
-        // Update templates with synced data
-        if (data.data && data.data.length > 0) {
-          const syncedTemplates = data.data.map((template) => ({
-            id: template.id,
-            name: template.name,
-            category: template.category || 'Utility',
-            status: template.status || 'Approved',
-            content: template.components?.find(c => c.type === 'BODY')?.text || 'Template content',
-            variables: template.components?.find(c => c.type === 'BODY')?.example?.body_text?.[0] || []
-          }));
-          
-          setTemplates(syncedTemplates);
-          // Persist templates in localStorage
-          localStorage.setItem('whatsapp-templates', JSON.stringify(syncedTemplates));
-          toast.success(`${syncedTemplates.length} templates synced successfully!`);
-        } else {
-          toast.success('Templates synced successfully! No templates found.');
-        }
+      const syncedTemplates = await whatsappService.syncTemplates();
+      
+      setTemplates(syncedTemplates);
+      
+      if (syncedTemplates.length > 0) {
+        toast.success(`${syncedTemplates.length} templates synced successfully!`);
       } else {
-        const errorData = await response.json();
-        console.error('Templates sync error response:', errorData);
-        toast.error(`Failed to sync templates: ${errorData.error?.message || 'API Error'}`);
+        toast.success('Templates synced successfully! No templates found.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sync error:', error);
-      toast.error('Failed to sync templates. Please check your API settings and try again.');
+      toast.error(`Failed to sync templates: ${error.message}`);
     } finally {
       setIsSyncing(false);
     }

@@ -1,8 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { pusherService } from '../services/pusherService';
+import { databaseService } from '../services/databaseService';
+import { whatsappService } from '../services/whatsappService';
 
 const Settings = () => {
   const [settings, setSettings] = useState({
@@ -21,12 +22,23 @@ const Settings = () => {
   });
 
   const [testingWhatsApp, setTestingWhatsApp] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    // Load settings from localStorage
-    const savedSettings = localStorage.getItem('fastwapi-settings');
-    if (savedSettings) {
-      setSettings(JSON.parse(savedSettings));
+    // Initialize database service
+    databaseService.initializeSettings();
+
+    // Subscribe to settings changes
+    const unsubscribe = databaseService.onSettingsChange((newSettings) => {
+      if (newSettings) {
+        setSettings(prevSettings => ({ ...prevSettings, ...newSettings }));
+      }
+    });
+
+    // Load initial settings
+    const initialSettings = databaseService.getSettings();
+    if (initialSettings) {
+      setSettings(prevSettings => ({ ...prevSettings, ...initialSettings }));
     }
 
     // Check Pusher connection
@@ -38,7 +50,11 @@ const Settings = () => {
     };
 
     const interval = setInterval(checkPusherConnection, 2000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -46,11 +62,17 @@ const Settings = () => {
     setSettings(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSave = () => {
-    // Save to localStorage
-    localStorage.setItem('fastwapi-settings', JSON.stringify(settings));
-    console.log('Settings saved:', settings);
-    toast.success('Settings saved successfully!');
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await databaseService.saveSettings(settings);
+      toast.success('Settings saved successfully!');
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const testWhatsAppConnection = async () => {
@@ -61,29 +83,18 @@ const Settings = () => {
 
     setTestingWhatsApp(true);
     try {
-      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${settings.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('WhatsApp connection test successful:', data);
-        setConnectionStatus(prev => ({ ...prev, whatsapp: true }));
-        toast.success('WhatsApp Business API connection successful!');
-      } else {
-        const errorData = await response.json();
-        console.error('WhatsApp connection test failed:', errorData);
-        setConnectionStatus(prev => ({ ...prev, whatsapp: false }));
-        toast.error(`WhatsApp connection failed: ${errorData.error?.message || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('WhatsApp connection test error:', error);
+      // Save settings first so the service can use them
+      await databaseService.saveSettings(settings);
+      
+      // Test the connection
+      await whatsappService.testConnection();
+      
+      setConnectionStatus(prev => ({ ...prev, whatsapp: true }));
+      toast.success('WhatsApp Business API connection successful!');
+    } catch (error: any) {
+      console.error('WhatsApp connection test failed:', error);
       setConnectionStatus(prev => ({ ...prev, whatsapp: false }));
-      toast.error('Failed to test WhatsApp connection');
+      toast.error(`WhatsApp connection failed: ${error.message}`);
     } finally {
       setTestingWhatsApp(false);
     }
@@ -254,10 +265,11 @@ const Settings = () => {
           <div className="pt-6">
             <button
               onClick={handleSave}
-              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+              disabled={saving}
+              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <Save className="h-4 w-4" />
-              Save Settings
+              {saving ? 'Saving...' : 'Save Settings'}
             </button>
           </div>
         </div>
