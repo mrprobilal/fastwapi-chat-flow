@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle, sync as Sync, Globe } from 'lucide-react';
+import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle, RefreshCw, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { pusherService } from '../services/pusherService';
 import { databaseService } from '../services/databaseService';
@@ -219,7 +219,7 @@ const Settings = () => {
                 disabled={syncing || !syncStatus.configured}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
               >
-                <Sync className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
                 {syncing ? 'Syncing...' : 'Sync Now'}
               </button>
               {syncStatus.enabled ? (
