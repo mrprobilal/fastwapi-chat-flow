@@ -1,30 +1,51 @@
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Search, Send, FileText, MoreVertical, Paperclip, Smile } from 'lucide-react';
+import { MessageSquare, Search, Send, FileText, Paperclip, Smile } from 'lucide-react';
 import { usePusher } from '../hooks/usePusher';
 import { toast } from 'sonner';
 import { useLocation } from 'react-router-dom';
 
 const Messages = () => {
   const location = useLocation();
-  const [selectedChat, setSelectedChat] = useState(1);
+  const [selectedChat, setSelectedChat] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
   const [templates, setTemplates] = useState([]);
-  const [messages, setMessages] = useState([
-    { id: 1, sender: 'business', text: 'Hello! I\'d be happy to help you with your order. Can you please provide your order number?', time: '2:26 PM', status: 'read' },
-    { id: 2, sender: 'business', text: 'Thank you! I can see your order is being processed and will be shipped tomorrow.', time: '2:29 PM', status: 'read' },
-  ]);
+  const [messages, setMessages] = useState([]);
+  const [apiStatus, setApiStatus] = useState({ connected: false, checking: true });
 
   const { isConnected, subscribeToMessages, unsubscribeFromMessages } = usePusher();
 
-  const [chats, setChats] = useState([
-    { id: 1, name: 'John Doe', phone: '+1234567890', lastMessage: 'Thank you for the quick response!', time: '2:30 PM', unread: 2, avatar: 'JD', online: true },
-    { id: 2, name: 'Sarah Wilson', phone: '+1987654321', lastMessage: 'Can you send me the details?', time: '1:15 PM', unread: 0, avatar: 'SW', online: false },
-    { id: 3, name: 'Mike Johnson', phone: '+1122334455', lastMessage: 'Perfect, thanks!', time: '11:45 AM', unread: 1, avatar: 'MJ', online: true },
-  ]);
+  const [chats, setChats] = useState([]);
 
-  // Load templates from API
+  // Check WhatsApp API status automatically
+  useEffect(() => {
+    const checkApiStatus = async () => {
+      try {
+        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+        if (!settings.accessToken || !settings.businessId) {
+          setApiStatus({ connected: false, checking: false });
+          return;
+        }
+
+        const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${settings.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        setApiStatus({ connected: response.ok, checking: false });
+      } catch (error) {
+        setApiStatus({ connected: false, checking: false });
+      }
+    };
+
+    checkApiStatus();
+  }, []);
+
+  // Load real templates from API
   useEffect(() => {
     const loadTemplates = async () => {
       try {
@@ -45,9 +66,9 @@ const Messages = () => {
           console.log('Templates loaded:', data);
           
           if (data.data) {
-            const formattedTemplates = data.data.map((template, index) => ({
-              id: template.id || index + 1,
-              name: template.name || `Template ${index + 1}`,
+            const formattedTemplates = data.data.map((template) => ({
+              id: template.id,
+              name: template.name,
               content: template.components?.find(c => c.type === 'BODY')?.text || 'Template content'
             }));
             setTemplates(formattedTemplates);
@@ -61,21 +82,68 @@ const Messages = () => {
     loadTemplates();
   }, []);
 
+  // Load messages from fastwapi.com
+  useEffect(() => {
+    const loadMessages = async () => {
+      try {
+        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+        if (!settings.accessToken) return;
+
+        const response = await fetch('https://fastwapi.com/api/messages', {
+          headers: {
+            'Authorization': `Bearer ${settings.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.messages) {
+            setMessages(data.messages);
+            
+            // Extract unique chats from messages
+            const uniqueChats = data.messages.reduce((acc, msg) => {
+              const existingChat = acc.find(chat => chat.phone === msg.from);
+              if (!existingChat && msg.from) {
+                acc.push({
+                  id: msg.from,
+                  name: msg.contact_name || msg.from,
+                  phone: msg.from,
+                  lastMessage: msg.text || msg.body,
+                  time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  unread: 0,
+                  avatar: (msg.contact_name || msg.from).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+                  online: false
+                });
+              }
+              return acc;
+            }, []);
+            
+            setChats(uniqueChats);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading messages:', error);
+      }
+    };
+
+    loadMessages();
+  }, []);
+
   // Handle selected customer from navigation
   useEffect(() => {
     if (location.state?.selectedCustomer) {
       const customer = location.state.selectedCustomer;
-      // Add to chats if not already present
       const existingChat = chats.find(chat => chat.phone === customer.phone);
       if (!existingChat) {
         const newChat = {
-          id: Date.now(),
+          id: customer.phone,
           name: customer.name,
           phone: customer.phone,
           lastMessage: 'Start conversation',
           time: 'Now',
           unread: 0,
-          avatar: customer.name.split(' ').map(n => n[0]).join('').toUpperCase(),
+          avatar: customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
           online: false
         };
         setChats(prev => [newChat, ...prev]);
@@ -84,64 +152,73 @@ const Messages = () => {
         setSelectedChat(existingChat.id);
       }
     }
-  }, [location.state]);
+  }, [location.state, chats]);
 
-  // Load messages from localStorage
+  // Subscribe to real-time messages
   useEffect(() => {
-    const savedMessages = localStorage.getItem('whatsapp-messages');
-    if (savedMessages) {
-      const allMessages = JSON.parse(savedMessages);
-      // Only show business messages (messages we sent)
-      const businessMessages = allMessages.filter(msg => msg.sender === 'business');
-      setMessages(businessMessages);
-    }
-  }, [selectedChat]);
-
-  // Save messages to localStorage
-  useEffect(() => {
-    localStorage.setItem('whatsapp-messages', JSON.stringify(messages));
-  }, [messages]);
-
-  useEffect(() => {
-    // Subscribe to real-time messages
     subscribeToMessages((data) => {
       console.log('New message received:', data);
       
-      // Only add if it's a business message
-      if (data.sender === 'business') {
-        const newMsg = {
-          id: Date.now(),
-          sender: 'business',
-          text: data.message || data.text,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: 'delivered'
-        };
-        
-        setMessages(prev => [...prev, newMsg]);
-        toast.success('New message received!');
+      const newMsg = {
+        id: Date.now(),
+        from: data.from || data.phone,
+        text: data.message || data.text || data.body,
+        timestamp: new Date().toISOString(),
+        type: 'received'
+      };
+      
+      setMessages(prev => [...prev, newMsg]);
+      
+      // Add to chats if new contact
+      if (data.from || data.phone) {
+        setChats(prev => {
+          const existingChat = prev.find(chat => chat.phone === (data.from || data.phone));
+          if (!existingChat) {
+            const newChat = {
+              id: data.from || data.phone,
+              name: data.contact_name || data.from || data.phone,
+              phone: data.from || data.phone,
+              lastMessage: newMsg.text,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              unread: selectedChat === (data.from || data.phone) ? 0 : 1,
+              avatar: (data.contact_name || data.from || data.phone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+              online: true
+            };
+            return [newChat, ...prev];
+          } else {
+            return prev.map(chat => 
+              chat.phone === (data.from || data.phone) 
+                ? { ...chat, lastMessage: newMsg.text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), unread: selectedChat === chat.id ? 0 : chat.unread + 1 }
+                : chat
+            );
+          }
+        });
       }
+      
+      toast.success('New message received!');
     });
 
     return () => {
       unsubscribeFromMessages();
     };
-  }, [subscribeToMessages, unsubscribeFromMessages]);
+  }, [subscribeToMessages, unsubscribeFromMessages, selectedChat]);
 
   const sendMessage = async () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !selectedChat) return;
 
     const messageData = {
       id: Date.now(),
-      sender: 'business',
+      from: 'business',
+      to: selectedChat,
       text: newMessage,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toISOString(),
+      type: 'sent',
       status: 'sending'
     };
 
     setMessages(prev => [...prev, messageData]);
     setNewMessage('');
 
-    // Send to WhatsApp Business API
     try {
       const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
       const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
@@ -152,21 +229,19 @@ const Messages = () => {
         },
         body: JSON.stringify({
           messaging_product: 'whatsapp',
-          to: getSelectedChat()?.phone?.replace('+', ''),
+          to: selectedChat.replace('+', ''),
           text: { body: newMessage }
         })
       });
 
-      if (!response.ok) {
+      if (response.ok) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
+        ));
+        toast.success('Message sent successfully!');
+      } else {
         throw new Error('Failed to send message');
       }
-      
-      // Update message status to sent
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
-      ));
-      
-      toast.success('Message sent successfully!');
     } catch (error) {
       console.error('Error sending message:', error);
       setMessages(prev => prev.map(msg => 
@@ -177,11 +252,15 @@ const Messages = () => {
   };
 
   const sendTemplate = async (template) => {
+    if (!selectedChat) return;
+
     const messageData = {
       id: Date.now(),
-      sender: 'business',
+      from: 'business',
+      to: selectedChat,
       text: template.content,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toISOString(),
+      type: 'sent',
       status: 'sending'
     };
 
@@ -198,7 +277,7 @@ const Messages = () => {
         },
         body: JSON.stringify({
           messaging_product: 'whatsapp',
-          to: getSelectedChat()?.phone?.replace('+', ''),
+          to: selectedChat.replace('+', ''),
           type: 'template',
           template: {
             name: template.name,
@@ -229,6 +308,10 @@ const Messages = () => {
 
   const getSelectedChat = () => chats.find(chat => chat.id === selectedChat);
   const selectedChatData = getSelectedChat();
+  const chatMessages = messages.filter(msg => 
+    (msg.from === selectedChat && msg.type === 'received') || 
+    (msg.to === selectedChat && msg.type === 'sent')
+  );
 
   return (
     <div className="h-screen bg-gray-100 flex flex-col">
@@ -239,18 +322,29 @@ const Messages = () => {
             <h1 className="text-xl md:text-2xl font-bold text-gray-900">Messages</h1>
             <p className="text-sm text-gray-600 hidden md:block">Real-time messaging with your customers</p>
           </div>
-          <div className="flex items-center space-x-2">
-            <div className={`h-3 w-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className="text-sm text-gray-600 hidden md:inline">
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </span>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <div className={`h-3 w-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className="text-sm text-gray-600 hidden md:inline">
+                Pusher: {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className={`h-3 w-3 rounded-full ${
+                apiStatus.checking ? 'bg-yellow-500' : 
+                apiStatus.connected ? 'bg-green-500' : 'bg-red-500'
+              }`}></div>
+              <span className="text-sm text-gray-600 hidden md:inline">
+                WhatsApp: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Chat List */}
-        <div className="w-full md:w-1/3 bg-white border-r border-gray-200 flex flex-col md:flex">
+        <div className="w-full md:w-1/3 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
           <div className="p-4 border-b border-gray-200 flex-shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -262,45 +356,53 @@ const Messages = () => {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {chats.map((chat) => (
-              <div
-                key={chat.id}
-                onClick={() => setSelectedChat(chat.id)}
-                className={`p-4 cursor-pointer border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                  selectedChat === chat.id ? 'bg-green-50 border-l-4 border-l-green-500' : ''
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="relative flex-shrink-0">
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-white font-semibold text-sm">
-                      {chat.avatar}
-                    </div>
-                    {chat.online && (
-                      <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 bg-green-500 border-2 border-white rounded-full"></div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{chat.name}</p>
-                      <p className="text-xs text-gray-500">{chat.time}</p>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-600 truncate">{chat.lastMessage}</p>
-                      {chat.unread > 0 && (
-                        <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-green-500 rounded-full min-w-[20px]">
-                          {chat.unread}
-                        </span>
+            {chats.length === 0 ? (
+              <div className="p-4 text-center text-gray-500">
+                <MessageSquare className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                <p>No conversations yet</p>
+                <p className="text-xs">Messages will appear here when you receive them</p>
+              </div>
+            ) : (
+              chats.map((chat) => (
+                <div
+                  key={chat.id}
+                  onClick={() => setSelectedChat(chat.id)}
+                  className={`p-4 cursor-pointer border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                    selectedChat === chat.id ? 'bg-green-50 border-l-4 border-l-green-500' : ''
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="relative flex-shrink-0">
+                      <div className="h-12 w-12 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-white font-semibold text-sm">
+                        {chat.avatar}
+                      </div>
+                      {chat.online && (
+                        <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 bg-green-500 border-2 border-white rounded-full"></div>
                       )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{chat.name}</p>
+                        <p className="text-xs text-gray-500">{chat.time}</p>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-gray-600 truncate">{chat.lastMessage}</p>
+                        {chat.unread > 0 && (
+                          <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-green-500 rounded-full min-w-[20px]">
+                            {chat.unread}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
         {/* Chat Messages */}
-        <div className="hidden md:flex flex-1 flex-col bg-gradient-to-b from-green-50 to-white">
+        <div className="flex-1 flex-col bg-gradient-to-b from-green-50 to-white hidden md:flex">
           {selectedChatData ? (
             <>
               {/* Chat Header */}
@@ -322,59 +424,55 @@ const Messages = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                      <MoreVertical className="h-5 w-5 text-gray-600" />
-                    </button>
-                  </div>
                 </div>
               </div>
               
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className="flex justify-end"
-                  >
-                    <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-lg relative bg-green-500 text-white rounded-br-none">
-                      <p className="text-sm leading-relaxed">{message.text}</p>
-                      <div className="flex items-center justify-end mt-1 space-x-1">
-                        <p className="text-xs text-green-100">{message.time}</p>
-                        <div className="flex">
-                          {message.status === 'sending' && (
-                            <div className="h-3 w-3 border-2 border-green-200 border-t-green-100 rounded-full animate-spin"></div>
-                          )}
-                          {message.status === 'sent' && (
-                            <svg className="h-3 w-3 text-green-100" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                          {message.status === 'delivered' && (
-                            <svg className="h-3 w-3 text-green-100" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                          {message.status === 'read' && (
+                {chatMessages.length === 0 ? (
+                  <div className="text-center text-gray-500 mt-8">
+                    <MessageSquare className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                    <p>No messages yet</p>
+                    <p className="text-sm">Start a conversation with {selectedChatData.name}</p>
+                  </div>
+                ) : (
+                  chatMessages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg relative ${
+                        message.type === 'sent' 
+                          ? 'bg-green-500 text-white rounded-br-none' 
+                          : 'bg-white text-gray-900 rounded-bl-none border border-gray-200'
+                      }`}>
+                        <p className="text-sm leading-relaxed">{message.text}</p>
+                        <div className="flex items-center justify-end mt-1 space-x-1">
+                          <p className={`text-xs ${message.type === 'sent' ? 'text-green-100' : 'text-gray-500'}`}>
+                            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                          {message.type === 'sent' && (
                             <div className="flex">
-                              <svg className="h-3 w-3 text-blue-300" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                              <svg className="h-3 w-3 text-blue-300 -ml-1" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
+                              {message.status === 'sending' && (
+                                <div className="h-3 w-3 border-2 border-green-200 border-t-green-100 rounded-full animate-spin"></div>
+                              )}
+                              {message.status === 'sent' && (
+                                <svg className="h-3 w-3 text-green-100" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                              {message.status === 'failed' && (
+                                <svg className="h-3 w-3 text-red-300" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                              )}
                             </div>
-                          )}
-                          {message.status === 'failed' && (
-                            <svg className="h-3 w-3 text-red-300" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
                           )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
 
               {/* Message Input */}
@@ -400,6 +498,7 @@ const Messages = () => {
                   <button
                     onClick={() => setShowTemplates(!showTemplates)}
                     className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                    disabled={templates.length === 0}
                   >
                     <FileText className="h-5 w-5" />
                   </button>
