@@ -83,107 +83,105 @@ const Messages = () => {
     loadTemplates();
   }, []);
 
-  // Load messages from fastwapi.com and create chats
+  // Load messages from fastwapi.com and localStorage
   useEffect(() => {
     const loadMessages = async () => {
       try {
         const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
-        if (!settings.accessToken) {
-          console.log('No access token found, loading from localStorage');
-          // Load from localStorage as fallback
-          const savedMessages = localStorage.getItem('whatsapp-messages');
-          const savedChats = localStorage.getItem('whatsapp-chats');
-          
-          if (savedMessages) {
-            setMessages(JSON.parse(savedMessages));
-          }
-          if (savedChats) {
-            setChats(JSON.parse(savedChats));
-          }
-          return;
-        }
-
-        console.log('Loading messages from FastWAPI...');
-        const response = await fetch('https://fastwapi.com/api/messages', {
-          headers: {
-            'Authorization': `Bearer ${settings.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Messages loaded from FastWAPI:', data);
-          
-          if (data.messages) {
-            setMessages(data.messages);
-            localStorage.setItem('whatsapp-messages', JSON.stringify(data.messages));
-            
-            // Extract unique chats from messages
-            const uniqueChats = new Map();
-            
-            data.messages.forEach(msg => {
-              if (msg.from && msg.from !== 'business') {
-                const chatId = msg.from;
-                if (!uniqueChats.has(chatId)) {
-                  uniqueChats.set(chatId, {
-                    id: chatId,
-                    name: msg.contact_name || msg.from,
-                    phone: msg.from,
-                    lastMessage: msg.text || msg.body || 'Media',
-                    time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    unread: 0,
-                    avatar: (msg.contact_name || msg.from).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-                    online: false
-                  });
-                } else {
-                  // Update with latest message
-                  const existing = uniqueChats.get(chatId);
-                  if (new Date(msg.timestamp) > new Date(existing.timestamp || 0)) {
-                    uniqueChats.set(chatId, {
-                      ...existing,
-                      lastMessage: msg.text || msg.body || 'Media',
-                      time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                      timestamp: msg.timestamp
-                    });
-                  }
-                }
-              }
-            });
-            
-            const chatsList = Array.from(uniqueChats.values());
-            setChats(chatsList);
-            localStorage.setItem('whatsapp-chats', JSON.stringify(chatsList));
-          }
-        } else {
-          console.error('Failed to load messages from FastWAPI');
-          // Fallback to localStorage
-          const savedMessages = localStorage.getItem('whatsapp-messages');
-          const savedChats = localStorage.getItem('whatsapp-chats');
-          
-          if (savedMessages) {
-            setMessages(JSON.parse(savedMessages));
-          }
-          if (savedChats) {
-            setChats(JSON.parse(savedChats));
-          }
-        }
-      } catch (error) {
-        console.error('Error loading messages:', error);
-        // Fallback to localStorage
+        
+        // Always load from localStorage first
         const savedMessages = localStorage.getItem('whatsapp-messages');
         const savedChats = localStorage.getItem('whatsapp-chats');
         
         if (savedMessages) {
-          setMessages(JSON.parse(savedMessages));
+          const parsedMessages = JSON.parse(savedMessages);
+          console.log('Loaded messages from localStorage:', parsedMessages);
+          setMessages(parsedMessages);
         }
         if (savedChats) {
-          setChats(JSON.parse(savedChats));
+          const parsedChats = JSON.parse(savedChats);
+          console.log('Loaded chats from localStorage:', parsedChats);
+          setChats(parsedChats);
         }
+
+        // Try to fetch from FastWAPI if settings are available
+        if (settings.accessToken) {
+          console.log('Fetching messages from FastWAPI...');
+          const response = await fetch('https://fastwapi.com/api/messages', {
+            headers: {
+              'Authorization': `Bearer ${settings.accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Messages from FastWAPI:', data);
+            
+            if (data.messages && data.messages.length > 0) {
+              // Process and store messages
+              const processedMessages = data.messages.map(msg => ({
+                id: msg.id || Date.now() + Math.random(),
+                from: msg.from,
+                to: msg.to,
+                text: msg.text || msg.body,
+                timestamp: msg.timestamp,
+                type: msg.from === 'business' ? 'sent' : 'received',
+                status: 'delivered',
+                contact_name: msg.contact_name
+              }));
+
+              setMessages(processedMessages);
+              localStorage.setItem('whatsapp-messages', JSON.stringify(processedMessages));
+              
+              // Create chats from messages
+              const uniqueChats = new Map();
+              
+              processedMessages.forEach(msg => {
+                if (msg.from && msg.from !== 'business') {
+                  const chatId = msg.from;
+                  if (!uniqueChats.has(chatId)) {
+                    uniqueChats.set(chatId, {
+                      id: chatId,
+                      name: msg.contact_name || msg.from,
+                      phone: msg.from,
+                      lastMessage: msg.text || 'Media',
+                      time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      unread: 0,
+                      avatar: (msg.contact_name || msg.from).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+                      online: false
+                    });
+                  } else {
+                    // Update with latest message
+                    const existing = uniqueChats.get(chatId);
+                    if (new Date(msg.timestamp) > new Date(existing.timestamp || 0)) {
+                      uniqueChats.set(chatId, {
+                        ...existing,
+                        lastMessage: msg.text || 'Media',
+                        time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        timestamp: msg.timestamp
+                      });
+                    }
+                  }
+                }
+              });
+              
+              const chatsList = Array.from(uniqueChats.values());
+              setChats(chatsList);
+              localStorage.setItem('whatsapp-chats', JSON.stringify(chatsList));
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading messages:', error);
       }
     };
 
     loadMessages();
+    
+    // Refresh every 30 seconds
+    const interval = setInterval(loadMessages, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // Handle selected customer from navigation
@@ -214,17 +212,20 @@ const Messages = () => {
     }
   }, [location.state, chats]);
 
-  // Subscribe to real-time messages
+  // Subscribe to real-time messages with improved handling
   useEffect(() => {
-    subscribeToMessages((data) => {
+    const handleIncomingMessage = (data) => {
       console.log('New message received via Pusher:', data);
       
       const newMsg = {
-        id: Date.now(),
+        id: Date.now() + Math.random(),
         from: data.from || data.phone,
+        to: data.to || 'business',
         text: data.message || data.text || data.body,
         timestamp: new Date().toISOString(),
-        type: 'received'
+        type: 'received',
+        status: 'delivered',
+        contact_name: data.contact_name || data.name
       };
       
       setMessages(prev => {
@@ -235,7 +236,7 @@ const Messages = () => {
       
       // Add to chats if new contact
       const contactPhone = data.from || data.phone;
-      if (contactPhone) {
+      if (contactPhone && contactPhone !== 'business') {
         setChats(prev => {
           const existingChat = prev.find(chat => chat.phone === contactPhone);
           let updated;
@@ -243,12 +244,12 @@ const Messages = () => {
           if (!existingChat) {
             const newChat = {
               id: contactPhone,
-              name: data.contact_name || contactPhone,
+              name: data.contact_name || data.name || contactPhone,
               phone: contactPhone,
               lastMessage: newMsg.text,
               time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               unread: selectedChat === contactPhone ? 0 : 1,
-              avatar: (data.contact_name || contactPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+              avatar: (data.contact_name || data.name || contactPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
               online: true
             };
             updated = [newChat, ...prev];
@@ -270,8 +271,10 @@ const Messages = () => {
         });
       }
       
-      toast.success('New message received!');
-    });
+      toast.success(`New message from ${data.contact_name || data.name || data.from}!`);
+    };
+
+    subscribeToMessages(handleIncomingMessage);
 
     return () => {
       unsubscribeFromMessages();
@@ -282,7 +285,7 @@ const Messages = () => {
     if (!newMessage.trim() || !selectedChat) return;
 
     const messageData = {
-      id: Date.now(),
+      id: Date.now() + Math.random(),
       from: 'business',
       to: selectedChat,
       text: newMessage,
@@ -342,7 +345,7 @@ const Messages = () => {
     if (!selectedChat) return;
 
     const messageData = {
-      id: Date.now(),
+      id: Date.now() + Math.random(),
       from: 'business',
       to: selectedChat,
       text: template.content,
@@ -413,9 +416,7 @@ const Messages = () => {
   const selectedChatData = getSelectedChat();
   const chatMessages = messages.filter(msg => 
     (msg.from === selectedChat && msg.type === 'received') || 
-    (msg.to === selectedChat && msg.type === 'sent') ||
-    (msg.from === selectedChat && !msg.type) || // For messages without explicit type
-    (msg.to === selectedChat && !msg.type)
+    (msg.to === selectedChat && msg.type === 'sent')
   );
 
   // Mobile view - show only chat list or selected chat
@@ -465,21 +466,21 @@ const Messages = () => {
               chatMessages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex ${message.type === 'sent' || message.from === 'business' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div className={`max-w-xs px-4 py-2 rounded-lg relative ${
-                    message.type === 'sent' || message.from === 'business'
+                    message.type === 'sent'
                       ? 'bg-green-500 text-white rounded-br-none' 
                       : 'bg-white text-gray-900 rounded-bl-none border border-gray-200'
                   }`}>
-                    <p className="text-sm leading-relaxed">{message.text || message.body}</p>
+                    <p className="text-sm leading-relaxed">{message.text}</p>
                     <div className="flex items-center justify-end mt-1 space-x-1">
                       <p className={`text-xs ${
-                        message.type === 'sent' || message.from === 'business' ? 'text-green-100' : 'text-gray-500'
+                        message.type === 'sent' ? 'text-green-100' : 'text-gray-500'
                       }`}>
                         {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
-                      {(message.type === 'sent' || message.from === 'business') && (
+                      {message.type === 'sent' && (
                         <div className="flex">
                           {message.status === 'sending' && (
                             <div className="h-3 w-3 border-2 border-green-200 border-t-green-100 rounded-full animate-spin"></div>
@@ -771,21 +772,21 @@ const Messages = () => {
                   chatMessages.map((message) => (
                     <div
                       key={message.id}
-                      className={`flex ${message.type === 'sent' || message.from === 'business' ? 'justify-end' : 'justify-start'}`}
+                      className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg relative ${
-                        message.type === 'sent' || message.from === 'business'
+                        message.type === 'sent'
                           ? 'bg-green-500 text-white rounded-br-none' 
                           : 'bg-white text-gray-900 rounded-bl-none border border-gray-200'
                       }`}>
-                        <p className="text-sm leading-relaxed">{message.text || message.body}</p>
+                        <p className="text-sm leading-relaxed">{message.text}</p>
                         <div className="flex items-center justify-end mt-1 space-x-1">
                           <p className={`text-xs ${
-                            message.type === 'sent' || message.from === 'business' ? 'text-green-100' : 'text-gray-500'
+                            message.type === 'sent' ? 'text-green-100' : 'text-gray-500'
                           }`}>
                             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
-                          {(message.type === 'sent' || message.from === 'business') && (
+                          {message.type === 'sent' && (
                             <div className="flex">
                               {message.status === 'sending' && (
                                 <div className="h-3 w-3 border-2 border-green-200 border-t-green-100 rounded-full animate-spin"></div>
