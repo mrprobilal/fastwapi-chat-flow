@@ -46,10 +46,17 @@ const Messages = () => {
     checkApiStatus();
   }, []);
 
-  // Load real templates from API
+  // Load and persist templates from API
   useEffect(() => {
     const loadTemplates = async () => {
       try {
+        // First load from localStorage
+        const savedTemplates = localStorage.getItem('whatsapp-templates');
+        if (savedTemplates) {
+          setTemplates(JSON.parse(savedTemplates));
+        }
+
+        // Then try to fetch fresh templates
         const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
         if (!settings.accessToken || !settings.businessId) {
           return;
@@ -73,6 +80,8 @@ const Messages = () => {
               content: template.components?.find(c => c.type === 'BODY')?.text || 'Template content'
             }));
             setTemplates(formattedTemplates);
+            // Persist templates in localStorage
+            localStorage.setItem('whatsapp-templates', JSON.stringify(formattedTemplates));
           }
         }
       } catch (error) {
@@ -87,8 +96,6 @@ const Messages = () => {
   useEffect(() => {
     const loadMessages = async () => {
       try {
-        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
-        
         // Always load from localStorage first
         const savedMessages = localStorage.getItem('whatsapp-messages');
         const savedChats = localStorage.getItem('whatsapp-chats');
@@ -105,6 +112,7 @@ const Messages = () => {
         }
 
         // Try to fetch from FastWAPI if settings are available
+        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
         if (settings.accessToken) {
           console.log('Fetching messages from FastWAPI...');
           const response = await fetch('https://fastwapi.com/api/messages', {
@@ -212,21 +220,33 @@ const Messages = () => {
     }
   }, [location.state, chats]);
 
-  // Subscribe to real-time messages with improved handling
+  // Enhanced message receiving with better handling
   useEffect(() => {
     const handleIncomingMessage = (data) => {
       console.log('New message received via Pusher:', data);
       
+      // Handle different data structures from webhook
+      const messageText = data.message || data.text || data.body || data.content;
+      const senderPhone = data.from || data.phone || data.sender;
+      const senderName = data.contact_name || data.name || data.contact;
+      
+      if (!messageText || !senderPhone) {
+        console.warn('Invalid message data received:', data);
+        return;
+      }
+      
       const newMsg = {
         id: Date.now() + Math.random(),
-        from: data.from || data.phone,
-        to: data.to || 'business',
-        text: data.message || data.text || data.body,
+        from: senderPhone,
+        to: 'business',
+        text: messageText,
         timestamp: new Date().toISOString(),
         type: 'received',
         status: 'delivered',
-        contact_name: data.contact_name || data.name
+        contact_name: senderName
       };
+      
+      console.log('Processing incoming message:', newMsg);
       
       setMessages(prev => {
         const updated = [...prev, newMsg];
@@ -234,36 +254,38 @@ const Messages = () => {
         return updated;
       });
       
-      // Add to chats if new contact
-      const contactPhone = data.from || data.phone;
-      if (contactPhone && contactPhone !== 'business') {
+      // Add/update chat
+      if (senderPhone && senderPhone !== 'business') {
         setChats(prev => {
-          const existingChat = prev.find(chat => chat.phone === contactPhone);
+          const existingChatIndex = prev.findIndex(chat => chat.phone === senderPhone);
           let updated;
           
-          if (!existingChat) {
+          if (existingChatIndex === -1) {
+            // Create new chat
             const newChat = {
-              id: contactPhone,
-              name: data.contact_name || data.name || contactPhone,
-              phone: contactPhone,
-              lastMessage: newMsg.text,
+              id: senderPhone,
+              name: senderName || senderPhone,
+              phone: senderPhone,
+              lastMessage: messageText,
               time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              unread: selectedChat === contactPhone ? 0 : 1,
-              avatar: (data.contact_name || data.name || contactPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+              unread: selectedChat === senderPhone ? 0 : 1,
+              avatar: (senderName || senderPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
               online: true
             };
             updated = [newChat, ...prev];
           } else {
-            updated = prev.map(chat => 
-              chat.phone === contactPhone 
-                ? { 
-                    ...chat, 
-                    lastMessage: newMsg.text, 
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
-                    unread: selectedChat === chat.id ? 0 : chat.unread + 1 
-                  }
-                : chat
-            );
+            // Update existing chat
+            updated = [...prev];
+            updated[existingChatIndex] = {
+              ...updated[existingChatIndex],
+              lastMessage: messageText,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              unread: selectedChat === senderPhone ? 0 : updated[existingChatIndex].unread + 1,
+              online: true
+            };
+            // Move to top
+            const updatedChat = updated.splice(existingChatIndex, 1)[0];
+            updated.unshift(updatedChat);
           }
           
           localStorage.setItem('whatsapp-chats', JSON.stringify(updated));
@@ -271,15 +293,17 @@ const Messages = () => {
         });
       }
       
-      toast.success(`New message from ${data.contact_name || data.name || data.from}!`);
+      toast.success(`New message from ${senderName || senderPhone}!`);
     };
 
-    subscribeToMessages(handleIncomingMessage);
+    if (isConnected) {
+      subscribeToMessages(handleIncomingMessage);
+    }
 
     return () => {
       unsubscribeFromMessages();
     };
-  }, [subscribeToMessages, unsubscribeFromMessages, selectedChat]);
+  }, [isConnected, subscribeToMessages, unsubscribeFromMessages, selectedChat]);
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;

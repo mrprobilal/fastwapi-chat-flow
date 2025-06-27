@@ -38,13 +38,24 @@ class PusherService {
 
   subscribeToMessages(callback: (data: any) => void) {
     if (this.channel) {
+      // Listen to multiple event types for better compatibility
       this.channel.bind('message-event', callback);
+      this.channel.bind('new-message', callback);
+      this.channel.bind('incoming-message', callback);
+      this.channel.bind('whatsapp-message', callback);
+      
+      console.log('Subscribed to message events');
     }
   }
 
   unsubscribeFromMessages() {
     if (this.channel) {
       this.channel.unbind('message-event');
+      this.channel.unbind('new-message');
+      this.channel.unbind('incoming-message');
+      this.channel.unbind('whatsapp-message');
+      
+      console.log('Unsubscribed from message events');
     }
   }
 

@@ -1,37 +1,21 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Send, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Templates = () => {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [templates, setTemplates] = useState([
-    {
-      id: 1,
-      name: 'Welcome Message',
-      category: 'Marketing',
-      status: 'Approved',
-      content: 'Welcome to {{business_name}}! We\'re excited to have you as a customer. How can we help you today?',
-      variables: ['business_name']
-    },
-    {
-      id: 2,
-      name: 'Order Confirmation',
-      category: 'Utility',
-      status: 'Approved',
-      content: 'Your order #{{order_number}} has been confirmed and will be delivered to {{address}} by {{delivery_date}}.',
-      variables: ['order_number', 'address', 'delivery_date']
-    },
-    {
-      id: 3,
-      name: 'Appointment Reminder',
-      category: 'Utility',
-      status: 'Approved',
-      content: 'Hi {{customer_name}}, this is a reminder that you have an appointment with us on {{date}} at {{time}}.',
-      variables: ['customer_name', 'date', 'time']
-    },
-  ]);
+  const [templates, setTemplates] = useState([]);
+
+  // Load templates from localStorage on component mount
+  useEffect(() => {
+    const savedTemplates = localStorage.getItem('whatsapp-templates');
+    if (savedTemplates) {
+      const parsedTemplates = JSON.parse(savedTemplates);
+      console.log('Loaded templates from localStorage:', parsedTemplates);
+      setTemplates(parsedTemplates);
+    }
+  }, []);
 
   const handleSyncTemplates = async () => {
     setIsSyncing(true);
@@ -58,15 +42,18 @@ const Templates = () => {
         
         // Update templates with synced data
         if (data.data && data.data.length > 0) {
-          const syncedTemplates = data.data.map((template, index) => ({
-            id: template.id || index + 1,
-            name: template.name || `Template ${index + 1}`,
+          const syncedTemplates = data.data.map((template) => ({
+            id: template.id,
+            name: template.name,
             category: template.category || 'Utility',
             status: template.status || 'Approved',
-            content: template.components?.[0]?.text || 'Template content',
-            variables: template.components?.[0]?.example?.body_text?.[0] || []
+            content: template.components?.find(c => c.type === 'BODY')?.text || 'Template content',
+            variables: template.components?.find(c => c.type === 'BODY')?.example?.body_text?.[0] || []
           }));
+          
           setTemplates(syncedTemplates);
+          // Persist templates in localStorage
+          localStorage.setItem('whatsapp-templates', JSON.stringify(syncedTemplates));
         }
         
         toast.success('Templates synced successfully!');
@@ -111,24 +98,31 @@ const Templates = () => {
             <h3 className="text-lg font-semibold text-gray-900">Available Templates ({templates.length})</h3>
           </div>
           <div className="divide-y divide-gray-200">
-            {templates.map((template) => (
-              <div
-                key={template.id}
-                onClick={() => setSelectedTemplate(template)}
-                className={`p-6 cursor-pointer hover:bg-gray-50 ${
-                  selectedTemplate?.id === template.id ? 'bg-green-50 border-l-4 border-green-600' : ''
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium text-gray-900">{template.name}</h4>
-                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                    {template.status}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500 mb-2">{template.category}</p>
-                <p className="text-sm text-gray-600 line-clamp-2">{template.content}</p>
+            {templates.length === 0 ? (
+              <div className="p-6 text-center text-gray-500">
+                <p>No templates available</p>
+                <p className="text-sm">Click "Sync Templates" to load your templates</p>
               </div>
-            ))}
+            ) : (
+              templates.map((template) => (
+                <div
+                  key={template.id}
+                  onClick={() => setSelectedTemplate(template)}
+                  className={`p-6 cursor-pointer hover:bg-gray-50 ${
+                    selectedTemplate?.id === template.id ? 'bg-green-50 border-l-4 border-green-600' : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-gray-900">{template.name}</h4>
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                      {template.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-2">{template.category}</p>
+                  <p className="text-sm text-gray-600 line-clamp-2">{template.content}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -147,12 +141,12 @@ const Templates = () => {
                   </div>
                 </div>
 
-                {selectedTemplate.variables.length > 0 && (
+                {selectedTemplate.variables && selectedTemplate.variables.length > 0 && (
                   <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Template Variables</label>
                     <div className="space-y-3">
-                      {selectedTemplate.variables.map((variable) => (
-                        <div key={variable}>
+                      {selectedTemplate.variables.map((variable, index) => (
+                        <div key={index}>
                           <label className="block text-xs font-medium text-gray-600 mb-1">
                             {variable.replace('_', ' ').toUpperCase()}
                           </label>
