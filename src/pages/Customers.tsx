@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Plus, Search, Phone, Mail, MessageCircle, RefreshCw, Upload } from 'lucide-react';
+import { Users, Plus, Search, Phone, Mail, MessageCircle, RefreshCw, Upload, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -21,31 +22,26 @@ interface Customer {
   lastMessage: string;
 }
 
+interface CustomerGroup {
+  id: string;
+  name: string;
+  description: string;
+  customerCount: number;
+}
+
 const Customers = () => {
   const navigate = useNavigate();
-  const [customers, setCustomers] = useState<Customer[]>([
-    {
-      id: '1',
-      name: 'John Doe',
-      phone: '+1234567890',
-      email: 'john@example.com',
-      group: 'VIP',
-      status: 'active',
-      lastMessage: '2 hours ago'
-    },
-    {
-      id: '2',
-      name: 'Sarah Wilson',
-      phone: '+1234567891',
-      email: 'sarah@example.com',
-      group: 'Regular',
-      status: 'active',
-      lastMessage: '1 day ago'
-    }
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerGroups, setCustomerGroups] = useState<CustomerGroup[]>([
+    { id: '1', name: 'VIP', description: 'VIP Customers', customerCount: 0 },
+    { id: '2', name: 'Regular', description: 'Regular Customers', customerCount: 0 },
+    { id: '3', name: 'Premium', description: 'Premium Customers', customerCount: 0 },
+    { id: '4', name: 'New', description: 'New Customers', customerCount: 0 }
   ]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
@@ -54,8 +50,33 @@ const Customers = () => {
     email: '',
     group: ''
   });
+  const [newGroup, setNewGroup] = useState({
+    name: '',
+    description: ''
+  });
 
-  const customerGroups = ['VIP', 'Regular', 'Premium', 'New', 'Inactive'];
+  // Load customers from localStorage on component mount
+  useEffect(() => {
+    const savedCustomers = localStorage.getItem('whatsapp-customers');
+    const savedGroups = localStorage.getItem('whatsapp-groups');
+    
+    if (savedCustomers) {
+      setCustomers(JSON.parse(savedCustomers));
+    }
+    if (savedGroups) {
+      setCustomerGroups(JSON.parse(savedGroups));
+    }
+  }, []);
+
+  // Save customers to localStorage whenever customers change
+  useEffect(() => {
+    localStorage.setItem('whatsapp-customers', JSON.stringify(customers));
+  }, [customers]);
+
+  // Save groups to localStorage whenever groups change
+  useEffect(() => {
+    localStorage.setItem('whatsapp-groups', JSON.stringify(customerGroups));
+  }, [customerGroups]);
 
   const filteredCustomers = customers.filter(customer =>
     customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -67,6 +88,7 @@ const Customers = () => {
     setIsSyncing(true);
     try {
       const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+      const authToken = localStorage.getItem('auth_token');
       
       if (!settings.accessToken || !settings.businessId) {
         toast.error('Please configure your WhatsApp API settings first');
@@ -74,45 +96,135 @@ const Customers = () => {
         return;
       }
 
-      const response = await fetch('https://fastwapi.com/api/sync-contacts', {
-        method: 'POST',
+      // Try direct WhatsApp Business API first
+      try {
+        const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}/contacts`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${settings.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Contacts synced from WhatsApp:', data);
+          
+          if (data.data && data.data.length > 0) {
+            const syncedCustomers = data.data.map((contact, index) => ({
+              id: contact.wa_id || `sync_${Date.now()}_${index}`,
+              name: contact.profile?.name || contact.name || 'Unknown Contact',
+              phone: contact.wa_id || contact.phone,
+              email: '',
+              group: 'Synced',
+              status: 'active' as const,
+              lastMessage: 'Never'
+            }));
+            setCustomers(prev => [...prev, ...syncedCustomers]);
+            toast.success(`Synced ${syncedCustomers.length} contacts from WhatsApp Business!`);
+          } else {
+            toast.info('No contacts found in WhatsApp Business account');
+          }
+        } else {
+          throw new Error(`WhatsApp API Error: ${response.status}`);
+        }
+      } catch (whatsappError) {
+        console.log('WhatsApp sync failed, trying FastWAPI:', whatsappError);
+        
+        // Fallback to FastWAPI
+        const response = await fetch('https://fastwapi.com/api/contacts', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Contacts synced from FastWAPI:', data);
+          
+          if (data.contacts && data.contacts.length > 0) {
+            const syncedCustomers = data.contacts.map((contact, index) => ({
+              id: contact.id || `fastwapi_${Date.now()}_${index}`,
+              name: contact.name || contact.profile?.name || 'Unknown',
+              phone: contact.wa_id || contact.phone,
+              email: contact.email || '',
+              group: 'Synced',
+              status: 'active' as const,
+              lastMessage: 'Never'
+            }));
+            setCustomers(prev => [...prev, ...syncedCustomers]);
+            toast.success(`Synced ${syncedCustomers.length} contacts!`);
+          } else {
+            toast.info('No contacts found to sync');
+          }
+        } else {
+          throw new Error(`FastWAPI Error: ${response.status}`);
+        }
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      toast.error('Failed to sync contacts. Please check your settings and try again.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSyncGroups = async () => {
+    try {
+      const authToken = localStorage.getItem('auth_token');
+      
+      const response = await fetch('https://fastwapi.com/api/groups', {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
-        body: JSON.stringify({
-          business_id: settings.businessId,
-          access_token: settings.accessToken
-        })
+          'Authorization': `Bearer ${authToken}`
+        }
       });
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Contacts synced:', data);
-        toast.success('Contacts synced successfully!');
+        console.log('Groups synced:', data);
         
-        // Refresh customers list if data is provided
-        if (data.contacts && data.contacts.length > 0) {
-          const syncedCustomers = data.contacts.map((contact, index) => ({
-            id: contact.id || `sync_${index}`,
-            name: contact.name || contact.profile?.name || 'Unknown',
-            phone: contact.wa_id || contact.phone,
-            email: contact.email || '',
-            group: 'Synced',
-            status: 'active' as const,
-            lastMessage: 'Never'
+        if (data.groups && data.groups.length > 0) {
+          const syncedGroups = data.groups.map((group, index) => ({
+            id: group.id || `group_${Date.now()}_${index}`,
+            name: group.name || `Group ${index + 1}`,
+            description: group.description || 'Synced from website',
+            customerCount: group.member_count || 0
           }));
-          setCustomers(prev => [...prev, ...syncedCustomers]);
+          setCustomerGroups(prev => [...prev, ...syncedGroups]);
+          toast.success(`Synced ${syncedGroups.length} groups!`);
+        } else {
+          toast.info('No groups found to sync');
         }
       } else {
-        toast.error('Failed to sync contacts');
+        toast.error('Failed to sync groups');
       }
     } catch (error) {
-      console.error('Sync error:', error);
-      toast.error('Failed to sync contacts. Please check your settings.');
-    } finally {
-      setIsSyncing(false);
+      console.error('Group sync error:', error);
+      toast.error('Failed to sync groups');
     }
+  };
+
+  const handleAddGroup = () => {
+    if (!newGroup.name.trim()) {
+      toast.error('Please enter a group name');
+      return;
+    }
+
+    const group: CustomerGroup = {
+      id: Date.now().toString(),
+      name: newGroup.name,
+      description: newGroup.description,
+      customerCount: 0
+    };
+
+    setCustomerGroups([...customerGroups, group]);
+    setNewGroup({ name: '', description: '' });
+    setIsGroupDialogOpen(false);
+    toast.success('Group created successfully');
   };
 
   const handleImportFromCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -198,6 +310,59 @@ const Customers = () => {
             <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
             {isSyncing ? 'Syncing...' : 'Sync Contacts'}
           </button>
+
+          <button
+            onClick={handleSyncGroups}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+          >
+            <Users className="h-4 w-4" />
+            Sync Groups
+          </button>
+          
+          <Dialog open={isGroupDialogOpen} onOpenChange={setIsGroupDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <UserPlus className="h-4 w-4 mr-2" />
+                Create Group
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Customer Group</DialogTitle>
+                <DialogDescription>
+                  Create a new group to organize your customers
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="groupName">Group Name *</Label>
+                  <Input
+                    id="groupName"
+                    value={newGroup.name}
+                    onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
+                    placeholder="Enter group name"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="groupDescription">Description</Label>
+                  <Input
+                    id="groupDescription"
+                    value={newGroup.description}
+                    onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
+                    placeholder="Enter group description"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsGroupDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddGroup} className="bg-green-600 hover:bg-green-700">
+                  Create Group
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
           
           <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
             <DialogTrigger asChild>
@@ -275,8 +440,8 @@ const Customers = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {customerGroups.map((group) => (
-                        <SelectItem key={group} value={group}>
-                          {group}
+                        <SelectItem key={group.id} value={group.name}>
+                          {group.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
