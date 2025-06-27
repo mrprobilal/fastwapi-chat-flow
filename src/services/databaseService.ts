@@ -26,7 +26,6 @@ class DatabaseService {
       this.settings = newSettings;
       this.notifySettingsChange();
       
-      // TODO: Save to Supabase database when connected
       console.log('Settings saved:', newSettings);
       return true;
     } catch (error) {
@@ -52,6 +51,16 @@ class DatabaseService {
     this.settingsCallbacks.forEach(callback => {
       callback(this.settings);
     });
+  }
+
+  // Get last sync time
+  getLastSyncTime() {
+    return this.settings?.lastSyncTime || null;
+  }
+
+  // Check if settings are synced from fastwapi.com
+  isSynced() {
+    return !!(this.settings?.lastSyncTime);
   }
 }
 
