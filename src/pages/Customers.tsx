@@ -85,111 +85,98 @@ const Customers = () => {
 
   const handleSyncContacts = async () => {
     setIsSyncing(true);
+    console.log('Starting contact sync...');
+    
     try {
       const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
       
-      if (!settings.accessToken || !settings.businessId) {
+      if (!settings.accessToken || !settings.phoneNumberId) {
         toast.error('Please configure your WhatsApp API settings first');
         setIsSyncing(false);
         return;
       }
 
-      // Try to get contacts from WhatsApp Business API - use the correct endpoint
-      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}/conversations`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${settings.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Conversations synced from WhatsApp:', data);
-        
-        if (data.data && data.data.length > 0) {
-          const syncedCustomers = data.data.map((conversation, index) => ({
-            id: conversation.id || `sync_${Date.now()}_${index}`,
-            name: conversation.participants?.[0]?.name || `Contact ${index + 1}`,
-            phone: conversation.participants?.[0]?.phone || conversation.participants?.[0]?.id,
-            email: '',
-            group: 'Synced',
-            status: 'active' as const,
-            lastMessage: conversation.last_message?.text || 'Never'
-          }));
-          
-          // Merge with existing customers
-          setCustomers(prev => {
-            const existing = prev.filter(c => !syncedCustomers.find(sc => sc.phone === c.phone));
-            return [...existing, ...syncedCustomers];
-          });
-          
-          toast.success(`Synced ${syncedCustomers.length} contacts from WhatsApp Business!`);
-        } else {
-          // Try alternative endpoint for phone numbers
-          const phoneResponse = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${settings.accessToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (phoneResponse.ok) {
-            toast.info('WhatsApp API connected but no contacts found. Contacts will appear when you receive messages.');
-          } else {
-            toast.error('No contacts found in WhatsApp Business account');
+      // First try to sync from FastWAPI messages
+      try {
+        console.log('Syncing from FastWAPI messages...');
+        const response = await fetch('https://fastwapi.com/api/messages', {
+          headers: {
+            'Authorization': `Bearer ${settings.accessToken}`,
+            'Content-Type': 'application/json'
           }
-        }
-      } else {
-        const errorData = await response.json();
-        console.error('WhatsApp sync error:', errorData);
-        
-        // Try to sync from fastwapi.com instead
-        try {
-          const fastwApiResponse = await fetch('https://fastwapi.com/api/sync-contacts', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              accessToken: settings.accessToken,
-              phoneNumberId: settings.phoneNumberId
-            })
-          });
+        });
 
-          if (fastwApiResponse.ok) {
-            const fastwApiData = await fastwApiResponse.json();
-            if (fastwApiData.contacts && fastwApiData.contacts.length > 0) {
-              const syncedCustomers = fastwApiData.contacts.map((contact, index) => ({
-                id: contact.id || `fastwapi_${Date.now()}_${index}`,
-                name: contact.name || `Contact ${index + 1}`,
-                phone: contact.phone,
-                email: contact.email || '',
-                group: 'Synced',
-                status: 'active' as const,
-                lastMessage: contact.lastMessage || 'Never'
-              }));
-              
+        if (response.ok) {
+          const data = await response.json();
+          console.log('FastWAPI messages data:', data);
+          
+          if (data.messages && data.messages.length > 0) {
+            const uniqueContacts = new Map();
+            
+            data.messages.forEach(msg => {
+              if (msg.from && msg.from !== 'business') {
+                const phone = msg.from.replace(/\D/g, ''); // Remove non-digits
+                if (!uniqueContacts.has(phone)) {
+                  uniqueContacts.set(phone, {
+                    id: `fastwapi_${phone}`,
+                    name: msg.contact_name || msg.from,
+                    phone: msg.from,
+                    email: '',
+                    group: 'FastWAPI',
+                    status: 'active' as const,
+                    lastMessage: msg.text || msg.body || 'No message'
+                  });
+                }
+              }
+            });
+
+            const syncedCustomers = Array.from(uniqueContacts.values());
+            
+            if (syncedCustomers.length > 0) {
+              // Merge with existing customers
               setCustomers(prev => {
                 const existing = prev.filter(c => !syncedCustomers.find(sc => sc.phone === c.phone));
                 return [...existing, ...syncedCustomers];
               });
               
               toast.success(`Synced ${syncedCustomers.length} contacts from FastWAPI!`);
-            } else {
-              toast.info('No contacts found to sync');
+              setIsSyncing(false);
+              return;
             }
-          } else {
-            toast.error('Failed to sync contacts from both WhatsApp API and FastWAPI');
           }
-        } catch (fastwApiError) {
-          toast.error(`Failed to sync contacts: ${errorData.error?.message || 'Unknown error'}`);
         }
+      } catch (error) {
+        console.error('FastWAPI sync error:', error);
       }
+
+      // Try WhatsApp Business API with correct endpoint
+      try {
+        console.log('Trying WhatsApp Business API...');
+        // Use the phone number endpoint to get basic info
+        const phoneResponse = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}`, {
+          headers: {
+            'Authorization': `Bearer ${settings.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (phoneResponse.ok) {
+          const phoneData = await phoneResponse.json();
+          console.log('WhatsApp phone data:', phoneData);
+          toast.info('WhatsApp API connected successfully. Contacts will appear when you receive messages.');
+        } else {
+          throw new Error('WhatsApp API connection failed');
+        }
+      } catch (error) {
+        console.error('WhatsApp API error:', error);
+        toast.error('Failed to connect to WhatsApp API');
+      }
+
+      toast.info('No contacts found to sync. Contacts will appear when you receive messages.');
+      
     } catch (error) {
       console.error('Sync error:', error);
-      toast.error('Failed to sync contacts. Please check your settings and try again.');
+      toast.error('Failed to sync contacts. Please check your settings.');
     } finally {
       setIsSyncing(false);
     }
@@ -197,18 +184,19 @@ const Customers = () => {
 
   const handleSyncGroups = async () => {
     try {
-      const authToken = localStorage.getItem('auth_token');
+      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
       
-      if (!authToken) {
-        toast.error('Please login first to sync groups');
+      if (!settings.accessToken) {
+        toast.error('Please configure your API settings first');
         return;
       }
 
+      // Try to sync groups from FastWAPI
       const response = await fetch('https://fastwapi.com/api/customer-groups', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${settings.accessToken}`
         }
       });
 
@@ -220,7 +208,7 @@ const Customers = () => {
           const syncedGroups = data.groups.map((group, index) => ({
             id: group.id || `group_${Date.now()}_${index}`,
             name: group.name || `Group ${index + 1}`,
-            description: group.description || 'Synced from website',
+            description: group.description || 'Synced from FastWAPI',
             customerCount: group.member_count || 0
           }));
           
@@ -230,12 +218,12 @@ const Customers = () => {
             return [...existing, ...syncedGroups];
           });
           
-          toast.success(`Synced ${syncedGroups.length} groups!`);
+          toast.success(`Synced ${syncedGroups.length} groups from FastWAPI!`);
         } else {
           toast.info('No groups found to sync');
         }
       } else {
-        toast.error('Failed to sync groups - API endpoint not available');
+        toast.error('Failed to sync groups from FastWAPI');
       }
     } catch (error) {
       console.error('Group sync error:', error);

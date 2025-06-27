@@ -1,42 +1,154 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, MessageSquare, Send, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    totalCustomers: 0,
+    messagesSent: 0,
+    activeChats: 0,
+    deliveryRate: '0%'
+  });
 
-  const stats = [
+  useEffect(() => {
+    // Load real data from localStorage
+    const loadStats = () => {
+      const savedCustomers = localStorage.getItem('whatsapp-customers');
+      const savedChats = localStorage.getItem('whatsapp-chats');
+      const savedMessages = localStorage.getItem('whatsapp-messages');
+      
+      let totalCustomers = 0;
+      let messagesSent = 0;
+      let activeChats = 0;
+      let deliveryRate = '0%';
+      
+      if (savedCustomers) {
+        const customers = JSON.parse(savedCustomers);
+        totalCustomers = customers.length;
+      }
+      
+      if (savedChats) {
+        const chats = JSON.parse(savedChats);
+        activeChats = chats.length;
+      }
+      
+      if (savedMessages) {
+        const messages = JSON.parse(savedMessages);
+        messagesSent = messages.filter(msg => msg.type === 'sent' || msg.from === 'business').length;
+        
+        // Calculate delivery rate
+        const sentMessages = messages.filter(msg => msg.type === 'sent' || msg.from === 'business');
+        const deliveredMessages = sentMessages.filter(msg => msg.status === 'sent' || !msg.status);
+        if (sentMessages.length > 0) {
+          deliveryRate = `${Math.round((deliveredMessages.length / sentMessages.length) * 100)}%`;
+        }
+      }
+      
+      setStats({
+        totalCustomers,
+        messagesSent,
+        activeChats,
+        deliveryRate
+      });
+    };
+
+    loadStats();
+    
+    // Refresh stats every 5 seconds
+    const interval = setInterval(loadStats, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const dashboardStats = [
     {
       title: 'Total Customers',
-      value: '1,248',
+      value: stats.totalCustomers.toString(),
       icon: Users,
       trend: { value: 12, isPositive: true },
       color: 'green' as const,
     },
     {
       title: 'Messages Sent',
-      value: '3,492',
+      value: stats.messagesSent.toString(),
       icon: Send,
       trend: { value: 8, isPositive: true },
       color: 'blue' as const,
     },
     {
       title: 'Active Chats',
-      value: '127',
+      value: stats.activeChats.toString(),
       icon: MessageSquare,
       trend: { value: -2, isPositive: false },
       color: 'purple' as const,
     },
     {
       title: 'Delivery Rate',
-      value: '98.5%',
+      value: stats.deliveryRate,
       icon: BarChart3,
       trend: { value: 0.5, isPositive: true },
       color: 'orange' as const,
     },
   ];
+
+  // Load recent activity
+  const [recentActivity, setRecentActivity] = useState([]);
+
+  useEffect(() => {
+    const loadRecentActivity = () => {
+      const savedMessages = localStorage.getItem('whatsapp-messages');
+      const savedCustomers = localStorage.getItem('whatsapp-customers');
+      
+      const activities = [];
+      
+      if (savedCustomers) {
+        const customers = JSON.parse(savedCustomers);
+        const recentCustomers = customers.slice(-3);
+        recentCustomers.forEach(customer => {
+          activities.push({
+            action: 'New customer added',
+            name: customer.name,
+            time: 'Recently'
+          });
+        });
+      }
+      
+      if (savedMessages) {
+        const messages = JSON.parse(savedMessages);
+        const recentMessages = messages
+          .filter(msg => msg.type === 'received' || msg.from !== 'business')
+          .slice(-2);
+        
+        recentMessages.forEach(msg => {
+          activities.push({
+            action: 'Message received',
+            name: msg.contact_name || msg.from || 'Customer',
+            time: new Date(msg.timestamp).toLocaleString()
+          });
+        });
+      }
+      
+      // Add some default activities if none exist
+      if (activities.length === 0) {
+        activities.push(
+          { action: 'Welcome to Dashboard', name: 'Start by adding customers', time: 'Now' },
+          { action: 'Connect WhatsApp API', name: 'Go to Settings', time: 'Next' }
+        );
+      }
+      
+      setRecentActivity(activities.slice(0, 4));
+    };
+
+    loadRecentActivity();
+    
+    // Refresh activity every 10 seconds
+    const interval = setInterval(loadRecentActivity, 10000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="p-8">
@@ -46,7 +158,7 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat) => (
+        {dashboardStats.map((stat) => (
           <DashboardCard
             key={stat.title}
             title={stat.title}
@@ -62,12 +174,7 @@ const Dashboard = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
           <div className="space-y-4">
-            {[
-              { action: 'New customer added', name: 'John Doe', time: '2 minutes ago' },
-              { action: 'Template message sent', name: 'Welcome Campaign', time: '5 minutes ago' },
-              { action: 'Customer replied', name: 'Sarah Wilson', time: '12 minutes ago' },
-              { action: 'Bulk message completed', name: '250 recipients', time: '1 hour ago' },
-            ].map((activity, index) => (
+            {recentActivity.map((activity, index) => (
               <div key={index} className="flex items-center justify-between py-2">
                 <div>
                   <p className="text-sm font-medium text-gray-900">{activity.action}</p>
@@ -98,7 +205,7 @@ const Dashboard = () => {
               onClick={() => navigate('/messages')}
               className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
             >
-              View Analytics
+              View Messages
             </button>
             <button 
               onClick={() => navigate('/settings')}
