@@ -32,6 +32,8 @@ const Login = () => {
     setIsLoading(true);
 
     try {
+      console.log('Sending login request with:', formData);
+      
       const response = await fetch('https://fastwapi.com/api/login', {
         method: 'POST',
         headers: {
@@ -41,14 +43,23 @@ const Login = () => {
       });
 
       const data = await response.json();
+      console.log('Login API response:', data);
 
-      if (response.ok) {
-        // Use the AuthContext login function
-        login(data.user, data.token);
+      if (response.ok && data.status === true) {
+        // Handle successful login - API returns user data directly in response
+        const userData = {
+          id: data.id.toString(),
+          email: data.email,
+          name: data.name
+        };
+        
+        console.log('Login successful, user data:', userData);
+        login(userData, data.token);
         toast.success('Login successful!');
         navigate('/');
       } else {
-        toast.error(data.message || 'Login failed');
+        console.log('Login failed:', data);
+        toast.error(data.errMsg || data.message || 'Login failed');
       }
     } catch (error) {
       console.error('Login error:', error);
