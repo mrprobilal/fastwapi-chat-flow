@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MessageSquare, Send, BarChart3, Users, Settings, LogOut, User, Menu, X, Megaphone } from 'lucide-react';
+import { MessageSquare, Send, BarChart3, Users, Settings, LogOut, User, Menu, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -17,7 +18,6 @@ const Sidebar = () => {
     { name: 'Customers', href: '/customers', icon: Users },
     { name: 'Messages', href: '/messages', icon: MessageSquare },
     { name: 'Templates', href: '/templates', icon: Send },
-    { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
 
