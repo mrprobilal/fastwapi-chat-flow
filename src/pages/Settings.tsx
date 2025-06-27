@@ -9,7 +9,6 @@ const Settings = () => {
     accessToken: '',
     businessId: '',
     phoneNumberId: '',
-    webhookUrl: '',
     pusherAppId: '2012752',
     pusherKey: '490510485d3b7c3874d4',
     pusherSecret: 'bdafa26e3b3d42f53d5c',
@@ -105,17 +104,6 @@ const Settings = () => {
                   value={settings.phoneNumberId}
                   onChange={handleInputChange}
                   placeholder="Enter your phone number ID"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Webhook URL</label>
-                <input
-                  type="url"
-                  name="webhookUrl"
-                  value={settings.webhookUrl}
-                  onChange={handleInputChange}
-                  placeholder="https://your-webhook-url.com"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
               </div>

@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Plus, Search, Phone, Mail, MessageCircle } from 'lucide-react';
+import { Users, Plus, Search, Phone, Mail, MessageCircle, RefreshCw, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -46,6 +46,8 @@ const Customers = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '',
@@ -60,6 +62,97 @@ const Customers = () => {
     customer.phone.includes(searchTerm) ||
     customer.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleSyncContacts = async () => {
+    setIsSyncing(true);
+    try {
+      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+      
+      if (!settings.accessToken || !settings.businessId) {
+        toast.error('Please configure your WhatsApp API settings first');
+        setIsSyncing(false);
+        return;
+      }
+
+      const response = await fetch('https://fastwapi.com/api/sync-contacts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          business_id: settings.businessId,
+          access_token: settings.accessToken
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Contacts synced:', data);
+        toast.success('Contacts synced successfully!');
+        
+        // Refresh customers list if data is provided
+        if (data.contacts && data.contacts.length > 0) {
+          const syncedCustomers = data.contacts.map((contact, index) => ({
+            id: contact.id || `sync_${index}`,
+            name: contact.name || contact.profile?.name || 'Unknown',
+            phone: contact.wa_id || contact.phone,
+            email: contact.email || '',
+            group: 'Synced',
+            status: 'active' as const,
+            lastMessage: 'Never'
+          }));
+          setCustomers(prev => [...prev, ...syncedCustomers]);
+        }
+      } else {
+        toast.error('Failed to sync contacts');
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      toast.error('Failed to sync contacts. Please check your settings.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleImportFromCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const csv = e.target?.result as string;
+      const lines = csv.split('\n');
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      
+      const nameIndex = headers.findIndex(h => h.includes('name'));
+      const phoneIndex = headers.findIndex(h => h.includes('phone') || h.includes('number'));
+      const emailIndex = headers.findIndex(h => h.includes('email'));
+      
+      const importedCustomers: Customer[] = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        if (values.length >= 2 && values[phoneIndex]) {
+          importedCustomers.push({
+            id: `import_${Date.now()}_${i}`,
+            name: values[nameIndex] || `Customer ${i}`,
+            phone: values[phoneIndex],
+            email: values[emailIndex] || '',
+            group: 'Imported',
+            status: 'active',
+            lastMessage: 'Never'
+          });
+        }
+      }
+      
+      setCustomers(prev => [...prev, ...importedCustomers]);
+      setIsImportDialogOpen(false);
+      toast.success(`Imported ${importedCustomers.length} customers successfully!`);
+    };
+    
+    reader.readAsText(file);
+  };
 
   const handleAddCustomer = () => {
     if (!newCustomer.name || !newCustomer.phone || !newCustomer.group) {
@@ -84,7 +177,6 @@ const Customers = () => {
   };
 
   const handleStartChat = (customer: Customer) => {
-    // Navigate to messages page and potentially pass customer data
     navigate('/messages', { state: { selectedCustomer: customer } });
     toast.success(`Opening chat with ${customer.name}`);
   };
@@ -97,75 +189,111 @@ const Customers = () => {
           <p className="text-gray-600 mt-2">Manage your WhatsApp contacts and groups</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-green-600 hover:bg-green-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Customer
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Add New Customer</DialogTitle>
-              <DialogDescription>
-                Add a new customer to your WhatsApp contact list and assign them to a group.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={newCustomer.name}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                  placeholder="Enter customer name"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="phone">Phone Number *</Label>
-                <Input
-                  id="phone"
-                  value={newCustomer.phone}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                  placeholder="+1234567890"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                  placeholder="customer@example.com"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="group">Customer Group *</Label>
-                <Select value={newCustomer.group} onValueChange={(value) => setNewCustomer({ ...newCustomer, group: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a group" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customerGroups.map((group) => (
-                      <SelectItem key={group} value={group}>
-                        {group}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Cancel
+        <div className="flex gap-3">
+          <button
+            onClick={handleSyncContacts}
+            disabled={isSyncing}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Syncing...' : 'Sync Contacts'}
+          </button>
+          
+          <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Import CSV
               </Button>
-              <Button onClick={handleAddCustomer} className="bg-green-600 hover:bg-green-700">
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Import Customers from CSV</DialogTitle>
+                <DialogDescription>
+                  Upload a CSV file with customer data. Expected columns: Name, Phone, Email
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleImportFromCSV}
+                  className="w-full"
+                />
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-green-600 hover:bg-green-700">
+                <Plus className="h-4 w-4 mr-2" />
                 Add Customer
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Add New Customer</DialogTitle>
+                <DialogDescription>
+                  Add a new customer to your WhatsApp contact list and assign them to a group.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    value={newCustomer.name}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                    placeholder="Enter customer name"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="phone">Phone Number *</Label>
+                  <Input
+                    id="phone"
+                    value={newCustomer.phone}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                    placeholder="+1234567890"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={newCustomer.email}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                    placeholder="customer@example.com"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="group">Customer Group *</Label>
+                  <Select value={newCustomer.group} onValueChange={(value) => setNewCustomer({ ...newCustomer, group: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customerGroups.map((group) => (
+                        <SelectItem key={group} value={group}>
+                          {group}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddCustomer} className="bg-green-600 hover:bg-green-700">
+                  Add Customer
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Send, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -5,8 +6,7 @@ import { toast } from 'sonner';
 const Templates = () => {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-
-  const templates = [
+  const [templates, setTemplates] = useState([
     {
       id: 1,
       name: 'Welcome Message',
@@ -31,27 +31,51 @@ const Templates = () => {
       content: 'Hi {{customer_name}}, this is a reminder that you have an appointment with us on {{date}} at {{time}}.',
       variables: ['customer_name', 'date', 'time']
     },
-  ];
+  ]);
 
   const handleSyncTemplates = async () => {
     setIsSyncing(true);
     try {
-      const response = await fetch('https://fastwapi.com/api/sync-templates', {
-        method: 'POST',
+      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+      
+      if (!settings.accessToken || !settings.businessId) {
+        toast.error('Please configure your WhatsApp API settings first');
+        setIsSyncing(false);
+        return;
+      }
+
+      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}/message_templates`, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${settings.accessToken}`,
+          'Content-Type': 'application/json'
         }
       });
 
       if (response.ok) {
+        const data = await response.json();
+        console.log('Templates synced:', data);
+        
+        // Update templates with synced data
+        if (data.data && data.data.length > 0) {
+          const syncedTemplates = data.data.map((template, index) => ({
+            id: template.id || index + 1,
+            name: template.name || `Template ${index + 1}`,
+            category: template.category || 'Utility',
+            status: template.status || 'Approved',
+            content: template.components?.[0]?.text || 'Template content',
+            variables: template.components?.[0]?.example?.body_text?.[0] || []
+          }));
+          setTemplates(syncedTemplates);
+        }
+        
         toast.success('Templates synced successfully!');
       } else {
-        toast.error('Failed to sync templates');
+        throw new Error(`API Error: ${response.status}`);
       }
     } catch (error) {
       console.error('Sync error:', error);
-      toast.error('Failed to sync templates');
+      toast.error('Failed to sync templates. Please check your API settings.');
     } finally {
       setIsSyncing(false);
     }
@@ -84,7 +108,7 @@ const Templates = () => {
         {/* Templates List */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Available Templates</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Available Templates ({templates.length})</h3>
           </div>
           <div className="divide-y divide-gray-200">
             {templates.map((template) => (
