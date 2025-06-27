@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Save, TestTube, CheckCircle, XCircle } from 'lucide-react';
+import { Save, TestTube, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { pusherService } from '../services/pusherService';
 import { whatsappService } from '../services/whatsappService';
@@ -28,6 +27,7 @@ const Settings = () => {
   });
 
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -114,6 +114,23 @@ const Settings = () => {
     }
   };
 
+  const syncContactsAndMessages = async () => {
+    setSyncing(true);
+    try {
+      console.log('🔄 Starting manual sync from Settings...');
+      
+      // Sync contacts and message history
+      const { messages, chats } = await whatsappService.syncAllMessageHistory();
+      
+      toast.success(`✅ Synced ${messages?.length || 0} messages and ${chats?.length || 0} contacts`);
+    } catch (error: any) {
+      console.error('❌ Manual sync failed:', error);
+      toast.error(`Sync failed: ${error.message}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleTestMessage = (data: any) => {
     console.log('🧪 Test message received in Settings:', data);
     toast.success('Test message sent successfully!');
@@ -131,13 +148,23 @@ const Settings = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
             <h3 className="text-lg font-semibold text-gray-900">WhatsApp Business API</h3>
-            <button
-              onClick={testWhatsAppConnection}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
-            >
-              <TestTube className="h-4 w-4" />
-              Test WhatsApp API
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={testWhatsAppConnection}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
+              >
+                <TestTube className="h-4 w-4" />
+                Test WhatsApp API
+              </button>
+              <button
+                onClick={syncContactsAndMessages}
+                disabled={syncing}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Syncing...' : 'Sync Contacts & Messages'}
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

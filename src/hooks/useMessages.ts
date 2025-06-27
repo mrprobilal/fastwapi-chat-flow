@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { usePusher } from './usePusher';
 import { whatsappService } from '../services/whatsappService';
@@ -9,6 +8,7 @@ export const useMessages = () => {
   const [chats, setChats] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [apiStatus, setApiStatus] = useState({ checking: false, connected: false });
+  const [syncStatus, setSyncStatus] = useState({ syncing: false, lastSync: null });
 
   const { isConnected, subscribeToMessages, unsubscribeFromMessages } = usePusher();
 
@@ -52,25 +52,60 @@ export const useMessages = () => {
     });
   }, [normalizePhoneNumber, deduplicateChats]);
 
+  // Full sync function
+  const syncAllData = useCallback(async () => {
+    setSyncStatus({ syncing: true, lastSync: null });
+    
+    try {
+      console.log('🔄 Starting full data sync...');
+      
+      // Sync contacts and message history
+      const { messages: syncedMessages, chats: syncedChats } = await whatsappService.syncAllMessageHistory();
+      
+      // Update state with synced data
+      if (syncedMessages && syncedMessages.length > 0) {
+        setMessages(syncedMessages);
+      }
+      
+      if (syncedChats && syncedChats.length > 0) {
+        setChats(syncedChats);
+      }
+      
+      // Sync templates
+      const syncedTemplates = await whatsappService.syncTemplates();
+      if (syncedTemplates && syncedTemplates.length > 0) {
+        setTemplates(syncedTemplates);
+      }
+      
+      const syncTime = new Date();
+      setSyncStatus({ syncing: false, lastSync: syncTime });
+      
+      toast.success(`✅ Synced ${syncedMessages?.length || 0} messages and ${syncedChats?.length || 0} contacts`);
+      
+    } catch (error: any) {
+      console.error('❌ Sync failed:', error);
+      setSyncStatus({ syncing: false, lastSync: null });
+      toast.error(`Sync failed: ${error.message}`);
+    }
+  }, []);
+
   // Load initial data
   useEffect(() => {
-    const loadInitialData = () => {
+    const loadInitialData = async () => {
       try {
-        // Load templates
+        // Load existing data from localStorage first
         const savedTemplates = localStorage.getItem('whatsapp-templates');
         if (savedTemplates) {
           const parsedTemplates = JSON.parse(savedTemplates);
           setTemplates(parsedTemplates);
         }
 
-        // Load messages
         const savedMessages = localStorage.getItem('whatsapp-messages');
         if (savedMessages) {
           const parsedMessages = JSON.parse(savedMessages);
           setMessages(parsedMessages);
         }
         
-        // Load chats
         const savedChats = localStorage.getItem('whatsapp-chats');
         if (savedChats) {
           const parsedChats = JSON.parse(savedChats);
@@ -80,26 +115,28 @@ export const useMessages = () => {
             localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicatedChats));
           }
         }
+
+        // Check WhatsApp API connection
+        setApiStatus(prev => ({ ...prev, checking: true }));
+        try {
+          await whatsappService.testConnection();
+          setApiStatus({ checking: false, connected: true });
+          
+          // If we have a connection and no local data, perform initial sync
+          if ((!savedMessages || !savedChats) && window.confirm('Would you like to sync your WhatsApp contacts and message history?')) {
+            await syncAllData();
+          }
+        } catch (error) {
+          console.error('WhatsApp API connection failed:', error);
+          setApiStatus({ checking: false, connected: false });
+        }
       } catch (error) {
         console.error('❌ Error loading stored data:', error);
       }
     };
 
-    // Check WhatsApp API connection
-    const checkWhatsAppConnection = async () => {
-      setApiStatus(prev => ({ ...prev, checking: true }));
-      try {
-        await whatsappService.testConnection();
-        setApiStatus({ checking: false, connected: true });
-      } catch (error) {
-        console.error('WhatsApp API connection failed:', error);
-        setApiStatus({ checking: false, connected: false });
-      }
-    };
-
     loadInitialData();
-    checkWhatsAppConnection();
-  }, [deduplicateChats]);
+  }, [deduplicateChats, syncAllData]);
 
   // ULTRA-ENHANCED message handling with MAXIMUM debugging
   const handleIncomingMessage = useCallback((data) => {
@@ -438,9 +475,11 @@ export const useMessages = () => {
     chats,
     templates,
     apiStatus,
+    syncStatus,
     setMessages,
     setChats,
     addOrUpdateChat,
-    normalizePhoneNumber
+    normalizePhoneNumber,
+    syncAllData
   };
 };
