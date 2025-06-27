@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { Save, TestTube, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { pusherService } from '../services/pusherService';
 import { databaseService } from '../services/databaseService';
+import TestMessage from '../components/TestMessage';
 
 const Settings = () => {
   const [settings, setSettings] = useState({
@@ -178,24 +178,35 @@ const Settings = () => {
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Integration Instructions */}
-      <div className="mt-8 bg-blue-50 rounded-lg border border-blue-200 p-4 md:p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-4">Integration Instructions</h3>
-        <div className="space-y-3 text-sm text-blue-800">
-          <p><strong>Add Pusher real-time communication to your website:</strong></p>
-          <pre className="bg-blue-100 p-3 rounded text-xs overflow-x-auto">
-{`// Install: npm install pusher-js
-const pusher = new Pusher('${settings.pusherKey}', {
-  cluster: '${settings.pusherCluster}'
-});
+        {/* Test Message System */}
+        <TestMessage />
 
-const channel = pusher.subscribe('fastwapi-channel');
-channel.bind('message-event', function(data) {
-  console.log('New message from app:', data);
-});`}
-          </pre>
+        {/* Integration Instructions */}
+        <div className="mt-8 bg-blue-50 rounded-lg border border-blue-200 p-4 md:p-6">
+          <h3 className="text-lg font-semibold text-blue-900 mb-4">FastWAPI Integration</h3>
+          <div className="space-y-3 text-sm text-blue-800">
+            <p><strong>Configure your FastWAPI backend to send messages via Pusher:</strong></p>
+            <pre className="bg-blue-100 p-3 rounded text-xs overflow-x-auto">
+{`# Python example for FastWAPI
+import pusher
+
+pusher_client = pusher.Pusher(
+    app_id='${settings.pusherAppId}',
+    key='${settings.pusherKey}',
+    secret='${settings.pusherSecret}',
+    cluster='${settings.pusherCluster}',
+    ssl=True
+)
+
+# Send message to app
+pusher_client.trigger('fastwapi-channel', 'message-event', {
+    'message': 'Hello from WhatsApp!',
+    'from': '+1234567890',
+    'contact_name': 'Customer Name'
+})`}
+            </pre>
+          </div>
         </div>
       </div>
     </div>

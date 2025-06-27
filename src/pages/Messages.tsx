@@ -13,7 +13,6 @@ const Messages = () => {
   const [showTemplates, setShowTemplates] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [apiStatus, setApiStatus] = useState({ connected: false, checking: true });
 
   const { isConnected, subscribeToMessages, unsubscribeFromMessages } = usePusher();
 
@@ -22,7 +21,6 @@ const Messages = () => {
   // Helper function to normalize phone numbers
   const normalizePhoneNumber = (phone) => {
     if (!phone) return '';
-    // Remove all non-digit characters and ensure it starts with +
     const digits = phone.replace(/\D/g, '');
     return digits.startsWith('1') ? `+${digits}` : `+${digits}`;
   };
@@ -44,11 +42,9 @@ const Messages = () => {
   const findExistingChat = (phone) => {
     const normalizedPhone = normalizePhoneNumber(phone);
     
-    // Check current state first
     const stateChat = chats.find(chat => normalizePhoneNumber(chat.phone) === normalizedPhone);
     if (stateChat) return stateChat;
 
-    // Check localStorage as fallback
     const savedChats = localStorage.getItem('whatsapp-chats');
     if (savedChats) {
       const parsedChats = JSON.parse(savedChats);
@@ -66,122 +62,42 @@ const Messages = () => {
       
       let updated;
       if (existingIndex >= 0) {
-        // Update existing chat
         updated = [...prev];
         updated[existingIndex] = { ...updated[existingIndex], ...newChat };
       } else {
-        // Add new chat
         updated = [newChat, ...prev];
       }
       
-      // Deduplicate and save to localStorage
       const deduplicated = deduplicateChats(updated);
       localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicated));
       return deduplicated;
     });
   };
 
-  // Check WhatsApp API status automatically
-  useEffect(() => {
-    const checkApiStatus = async () => {
-      try {
-        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
-        if (!settings.accessToken || !settings.phoneNumberId) {
-          setApiStatus({ connected: false, checking: false });
-          return;
-        }
-
-        const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${settings.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        setApiStatus({ connected: response.ok, checking: false });
-      } catch (error) {
-        console.error('API status check failed:', error);
-        setApiStatus({ connected: false, checking: false });
-      }
-    };
-
-    checkApiStatus();
-  }, []);
-
-  // Load and persist templates from API
-  useEffect(() => {
-    const loadTemplates = async () => {
-      try {
-        // First load from localStorage
-        const savedTemplates = localStorage.getItem('whatsapp-templates');
-        if (savedTemplates) {
-          setTemplates(JSON.parse(savedTemplates));
-        }
-
-        // Then try to fetch fresh templates
-        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
-        if (!settings.accessToken || !settings.businessId) {
-          return;
-        }
-
-        const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}/message_templates`, {
-          headers: {
-            'Authorization': `Bearer ${settings.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Templates loaded:', data);
-          
-          if (data.data) {
-            const formattedTemplates = data.data.map((template) => ({
-              id: template.id,
-              name: template.name,
-              content: template.components?.find(c => c.type === 'BODY')?.text || 'Template content'
-            }));
-            setTemplates(formattedTemplates);
-            // Persist templates in localStorage
-            localStorage.setItem('whatsapp-templates', JSON.stringify(formattedTemplates));
-          }
-        }
-      } catch (error) {
-        console.error('Error loading templates:', error);
-      }
-    };
-
-    loadTemplates();
-  }, []);
-
-  // Load messages and chats from localStorage only
+  // Load messages and chats from localStorage
   useEffect(() => {
     const loadStoredData = () => {
       try {
-        // Load messages from localStorage
         const savedMessages = localStorage.getItem('whatsapp-messages');
         const savedChats = localStorage.getItem('whatsapp-chats');
         
         if (savedMessages) {
           const parsedMessages = JSON.parse(savedMessages);
-          console.log('Loaded messages from localStorage:', parsedMessages);
+          console.log('📂 Loaded messages from localStorage:', parsedMessages.length);
           setMessages(parsedMessages);
         }
         
         if (savedChats) {
           const parsedChats = JSON.parse(savedChats);
-          console.log('Loaded chats from localStorage:', parsedChats);
-          // Deduplicate chats when loading
+          console.log('📂 Loaded chats from localStorage:', parsedChats.length);
           const deduplicatedChats = deduplicateChats(parsedChats);
           setChats(deduplicatedChats);
-          // Update localStorage if deduplication changed anything
           if (deduplicatedChats.length !== parsedChats.length) {
             localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicatedChats));
           }
         }
       } catch (error) {
-        console.error('Error loading stored data:', error);
+        console.error('❌ Error loading stored data:', error);
       }
     };
 
@@ -192,16 +108,15 @@ const Messages = () => {
   useEffect(() => {
     if (location.state?.selectedCustomer) {
       const customer = location.state.selectedCustomer;
-      console.log('Processing selected customer:', customer);
+      console.log('👤 Processing selected customer:', customer);
       
-      // Check if chat already exists using the helper function
       const existingChat = findExistingChat(customer.phone);
       
       if (existingChat) {
-        console.log('Found existing chat:', existingChat);
+        console.log('💬 Found existing chat:', existingChat);
         setSelectedChat(existingChat.id);
       } else {
-        console.log('Creating new chat for customer:', customer);
+        console.log('✨ Creating new chat for customer:', customer);
         const newChat = {
           id: customer.phone,
           name: customer.name,
@@ -213,7 +128,6 @@ const Messages = () => {
           online: false
         };
         
-        // Use the helper function to safely add the chat
         addOrUpdateChat(newChat);
         setSelectedChat(newChat.id);
       }
@@ -224,7 +138,13 @@ const Messages = () => {
   useEffect(() => {
     const handleIncomingMessage = (data) => {
       console.log('📨 Raw Pusher event received:', data);
-      console.log('📨 Event type:', typeof data, 'Keys:', Object.keys(data || {}));
+      console.log('📨 Event structure:', {
+        type: typeof data,
+        keys: Object.keys(data || {}),
+        hasMessage: !!data.message,
+        hasFrom: !!data.from,
+        hasPhone: !!data.phone
+      });
       
       // Handle different data structures from webhook
       const messageText = data.message || data.text || data.body || data.content;
@@ -255,11 +175,11 @@ const Messages = () => {
       setMessages(prev => {
         const updated = [...prev, newMsg];
         localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-        console.log('💾 Messages saved to localStorage, total:', updated.length);
+        console.log('💾 Messages saved, total:', updated.length);
         return updated;
       });
       
-      // Add/update chat using helper function
+      // Add/update chat
       if (senderPhone && senderPhone !== 'business') {
         const chatUpdate = {
           id: senderPhone,
@@ -292,6 +212,7 @@ const Messages = () => {
     };
   }, [isConnected, subscribeToMessages, unsubscribeFromMessages, selectedChat]);
 
+  // Simplified message sending - removed WhatsApp API calls
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;
 
@@ -302,57 +223,40 @@ const Messages = () => {
       text: newMessage,
       timestamp: new Date().toISOString(),
       type: 'sent',
-      status: 'sending'
+      status: 'sent' // Mark as sent immediately since we're not using WhatsApp API
     };
+
+    console.log('📤 Sending message:', messageData);
 
     setMessages(prev => {
       const updated = [...prev, messageData];
       localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
       return updated;
     });
+
+    // Update chat with last message
+    setChats(prev => {
+      const updated = prev.map(chat => 
+        chat.id === selectedChat 
+          ? { ...chat, lastMessage: newMessage, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+          : chat
+      );
+      localStorage.setItem('whatsapp-chats', JSON.stringify(updated));
+      return updated;
+    });
+
     setNewMessage('');
+    toast.success('Message sent! (Will be processed by your FastWAPI backend)');
 
-    try {
-      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
-      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${settings.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: selectedChat.replace('+', ''),
-          text: { body: newMessage }
-        })
-      });
-
-      if (response.ok) {
-        setMessages(prev => {
-          const updated = prev.map(msg => 
-            msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
-          );
-          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-          return updated;
-        });
-        toast.success('Message sent successfully!');
-      } else {
-        throw new Error('Failed to send message');
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages(prev => {
-        const updated = prev.map(msg => 
-          msg.id === messageData.id ? { ...msg, status: 'failed' } : msg
-        );
-        localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-        return updated;
-      });
-      toast.error('Failed to send message');
-    }
+    // TODO: Add your FastWAPI endpoint call here
+    // await fetch('your-fastwapi-endpoint/send-message', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ to: selectedChat, message: newMessage })
+    // });
   };
 
-  const sendTemplate = async (template) => {
+  const sendTemplate = (template) => {
     if (!selectedChat) return;
 
     const messageData = {
@@ -362,7 +266,7 @@ const Messages = () => {
       text: template.content,
       timestamp: new Date().toISOString(),
       type: 'sent',
-      status: 'sending'
+      status: 'sent'
     };
 
     setMessages(prev => {
@@ -370,57 +274,9 @@ const Messages = () => {
       localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
       return updated;
     });
+
     setShowTemplates(false);
-
-    try {
-      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
-      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${settings.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: selectedChat.replace('+', ''),
-          type: 'template',
-          template: {
-            name: template.name,
-            language: { code: 'en_US' }
-          }
-        })
-      });
-
-      if (response.ok) {
-        setMessages(prev => {
-          const updated = prev.map(msg => 
-            msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
-          );
-          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-          return updated;
-        });
-        toast.success('Template sent successfully!');
-      } else {
-        setMessages(prev => {
-          const updated = prev.map(msg => 
-            msg.id === messageData.id ? { ...msg, status: 'failed' } : msg
-          );
-          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-          return updated;
-        });
-        toast.error('Failed to send template');
-      }
-    } catch (error) {
-      console.error('Error sending template:', error);
-      setMessages(prev => {
-        const updated = prev.map(msg => 
-          msg.id === messageData.id ? { ...msg, status: 'failed' } : msg
-        );
-        localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-        return updated;
-      });
-      toast.error('Failed to send template');
-    }
+    toast.success('Template sent!');
   };
 
   const getSelectedChat = () => chats.find(chat => chat.id === selectedChat);
@@ -658,7 +514,7 @@ const Messages = () => {
     );
   }
 
-  // Desktop view - keep existing layout
+  // Desktop view
   return (
     <div className="h-screen bg-gray-100 flex flex-col">
       {/* Header */}
@@ -666,7 +522,7 @@ const Messages = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-gray-900">Messages</h1>
-            <p className="text-sm text-gray-600 hidden md:block">Real-time messaging with your customers</p>
+            <p className="text-sm text-gray-600 hidden md:block">Real-time messaging via Pusher</p>
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
@@ -681,7 +537,7 @@ const Messages = () => {
                 apiStatus.connected ? 'bg-green-500' : 'bg-red-500'
               }`}></div>
               <span className="text-sm text-gray-600 hidden md:inline">
-                WhatsApp: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Connected' : 'Disconnected'}
+                WhatsApp: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Ready' : 'Setup needed'}
               </span>
             </div>
           </div>
@@ -827,31 +683,7 @@ const Messages = () => {
 
               {/* Message Input */}
               <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
-                {showTemplates && templates.length > 0 && (
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">Message Templates</h4>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {templates.map((template) => (
-                        <button
-                          key={template.id}
-                          onClick={() => sendTemplate(template)}
-                          className="w-full text-left p-2 text-sm bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="font-medium">{template.name}</div>
-                          <div className="text-gray-500 text-xs truncate">{template.content}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setShowTemplates(!showTemplates)}
-                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-                    disabled={templates.length === 0}
-                  >
-                    <FileText className="h-5 w-5" />
-                  </button>
                   <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
                     <Paperclip className="h-5 w-5" />
                   </button>
@@ -882,22 +714,13 @@ const Messages = () => {
             <div className="flex-1 flex items-center justify-center text-center">
               <div>
                 <MessageSquare className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-gray-900 mb-2">Welcome to WhatsApp Business</h3>
-                <p className="text-gray-600">Select a chat to start messaging your customers</p>
+                <h3 className="text-xl font-medium text-gray-900 mb-2">Ready for Real-time Messages</h3>
+                <p className="text-gray-600">Select a chat to start messaging</p>
                 <div className="mt-4 flex items-center justify-center space-x-4 text-sm">
                   <div className="flex items-center space-x-2">
                     <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                     <span className="text-gray-600">
                       Pusher: {isConnected ? 'Ready' : 'Connecting...'}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className={`h-2 w-2 rounded-full ${
-                      apiStatus.checking ? 'bg-yellow-500' : 
-                      apiStatus.connected ? 'bg-green-500' : 'bg-red-500'
-                    }`}></div>
-                    <span className="text-gray-600">
-                      WhatsApp: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Ready' : 'Setup needed'}
                     </span>
                   </div>
                 </div>

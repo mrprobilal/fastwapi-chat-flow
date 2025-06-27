@@ -1,23 +1,31 @@
 
 import { useEffect, useState } from 'react';
 import { pusherService } from '../services/pusherService';
+import { databaseService } from '../services/databaseService';
 
 export const usePusher = () => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Use the settings from your configuration
-    const pusherKey = '490510485d3b7c3874d4';
-    const cluster = 'ap4';
+    // Get settings from database service
+    const settings = databaseService.getSettings();
+    const pusherKey = settings?.pusherKey || '490510485d3b7c3874d4';
+    const cluster = settings?.pusherCluster || 'ap4';
+
+    console.log('🔌 Initializing Pusher with:', { pusherKey, cluster });
 
     const channel = pusherService.connect(pusherKey, cluster);
 
-    // Monitor connection status
+    // Monitor connection status more frequently
     const checkConnection = () => {
-      setIsConnected(pusherService.isConnected());
+      const connected = pusherService.isConnected();
+      setIsConnected(connected);
+      console.log(`🔌 Pusher status: ${connected ? 'Connected' : 'Disconnected'} (${pusherService.getConnectionState()})`);
     };
 
-    const interval = setInterval(checkConnection, 1000);
+    // Check immediately and then every 2 seconds
+    checkConnection();
+    const interval = setInterval(checkConnection, 2000);
 
     return () => {
       clearInterval(interval);
@@ -26,10 +34,12 @@ export const usePusher = () => {
   }, []);
 
   const subscribeToMessages = (callback: (data: any) => void) => {
+    console.log('📨 Setting up message subscription...');
     pusherService.subscribeToMessages(callback);
   };
 
   const unsubscribeFromMessages = () => {
+    console.log('📨 Removing message subscription...');
     pusherService.unsubscribeFromMessages();
   };
 
