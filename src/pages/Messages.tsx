@@ -19,6 +19,68 @@ const Messages = () => {
 
   const [chats, setChats] = useState([]);
 
+  // Helper function to normalize phone numbers
+  const normalizePhoneNumber = (phone) => {
+    if (!phone) return '';
+    // Remove all non-digit characters and ensure it starts with +
+    const digits = phone.replace(/\D/g, '');
+    return digits.startsWith('1') ? `+${digits}` : `+${digits}`;
+  };
+
+  // Helper function to deduplicate chats by phone number
+  const deduplicateChats = (chatList) => {
+    const seen = new Set();
+    return chatList.filter(chat => {
+      const normalizedPhone = normalizePhoneNumber(chat.phone);
+      if (seen.has(normalizedPhone)) {
+        return false;
+      }
+      seen.add(normalizedPhone);
+      return true;
+    });
+  };
+
+  // Helper function to find existing chat by phone number
+  const findExistingChat = (phone) => {
+    const normalizedPhone = normalizePhoneNumber(phone);
+    
+    // Check current state first
+    const stateChat = chats.find(chat => normalizePhoneNumber(chat.phone) === normalizedPhone);
+    if (stateChat) return stateChat;
+
+    // Check localStorage as fallback
+    const savedChats = localStorage.getItem('whatsapp-chats');
+    if (savedChats) {
+      const parsedChats = JSON.parse(savedChats);
+      return parsedChats.find(chat => normalizePhoneNumber(chat.phone) === normalizedPhone);
+    }
+    
+    return null;
+  };
+
+  // Helper function to safely add or update chat
+  const addOrUpdateChat = (newChat) => {
+    setChats(prev => {
+      const normalizedPhone = normalizePhoneNumber(newChat.phone);
+      const existingIndex = prev.findIndex(chat => normalizePhoneNumber(chat.phone) === normalizedPhone);
+      
+      let updated;
+      if (existingIndex >= 0) {
+        // Update existing chat
+        updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], ...newChat };
+      } else {
+        // Add new chat
+        updated = [newChat, ...prev];
+      }
+      
+      // Deduplicate and save to localStorage
+      const deduplicated = deduplicateChats(updated);
+      localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicated));
+      return deduplicated;
+    });
+  };
+
   // Check WhatsApp API status automatically
   useEffect(() => {
     const checkApiStatus = async () => {
@@ -108,7 +170,13 @@ const Messages = () => {
         if (savedChats) {
           const parsedChats = JSON.parse(savedChats);
           console.log('Loaded chats from localStorage:', parsedChats);
-          setChats(parsedChats);
+          // Deduplicate chats when loading
+          const deduplicatedChats = deduplicateChats(parsedChats);
+          setChats(deduplicatedChats);
+          // Update localStorage if deduplication changed anything
+          if (deduplicatedChats.length !== parsedChats.length) {
+            localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicatedChats));
+          }
         }
 
         // Try to fetch from FastWAPI if settings are available
@@ -147,10 +215,10 @@ const Messages = () => {
               
               processedMessages.forEach(msg => {
                 if (msg.from && msg.from !== 'business') {
-                  const chatId = msg.from;
-                  if (!uniqueChats.has(chatId)) {
-                    uniqueChats.set(chatId, {
-                      id: chatId,
+                  const normalizedPhone = normalizePhoneNumber(msg.from);
+                  if (!uniqueChats.has(normalizedPhone)) {
+                    uniqueChats.set(normalizedPhone, {
+                      id: msg.from,
                       name: msg.contact_name || msg.from,
                       phone: msg.from,
                       lastMessage: msg.text || 'Media',
@@ -161,9 +229,9 @@ const Messages = () => {
                     });
                   } else {
                     // Update with latest message
-                    const existing = uniqueChats.get(chatId);
+                    const existing = uniqueChats.get(normalizedPhone);
                     if (new Date(msg.timestamp) > new Date(existing.timestamp || 0)) {
-                      uniqueChats.set(chatId, {
+                      uniqueChats.set(normalizedPhone, {
                         ...existing,
                         lastMessage: msg.text || 'Media',
                         time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -175,8 +243,9 @@ const Messages = () => {
               });
               
               const chatsList = Array.from(uniqueChats.values());
-              setChats(chatsList);
-              localStorage.setItem('whatsapp-chats', JSON.stringify(chatsList));
+              const deduplicatedChats = deduplicateChats(chatsList);
+              setChats(deduplicatedChats);
+              localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicatedChats));
             }
           }
         }
@@ -196,8 +265,16 @@ const Messages = () => {
   useEffect(() => {
     if (location.state?.selectedCustomer) {
       const customer = location.state.selectedCustomer;
-      const existingChat = chats.find(chat => chat.phone === customer.phone);
-      if (!existingChat) {
+      console.log('Processing selected customer:', customer);
+      
+      // Check if chat already exists using the helper function
+      const existingChat = findExistingChat(customer.phone);
+      
+      if (existingChat) {
+        console.log('Found existing chat:', existingChat);
+        setSelectedChat(existingChat.id);
+      } else {
+        console.log('Creating new chat for customer:', customer);
         const newChat = {
           id: customer.phone,
           name: customer.name,
@@ -208,17 +285,13 @@ const Messages = () => {
           avatar: customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
           online: false
         };
-        setChats(prev => {
-          const updated = [newChat, ...prev];
-          localStorage.setItem('whatsapp-chats', JSON.stringify(updated));
-          return updated;
-        });
+        
+        // Use the helper function to safely add the chat
+        addOrUpdateChat(newChat);
         setSelectedChat(newChat.id);
-      } else {
-        setSelectedChat(existingChat.id);
       }
     }
-  }, [location.state, chats]);
+  }, [location.state]);
 
   // Enhanced message receiving with better handling
   useEffect(() => {
@@ -254,43 +327,20 @@ const Messages = () => {
         return updated;
       });
       
-      // Add/update chat
+      // Add/update chat using helper function
       if (senderPhone && senderPhone !== 'business') {
-        setChats(prev => {
-          const existingChatIndex = prev.findIndex(chat => chat.phone === senderPhone);
-          let updated;
-          
-          if (existingChatIndex === -1) {
-            // Create new chat
-            const newChat = {
-              id: senderPhone,
-              name: senderName || senderPhone,
-              phone: senderPhone,
-              lastMessage: messageText,
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              unread: selectedChat === senderPhone ? 0 : 1,
-              avatar: (senderName || senderPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-              online: true
-            };
-            updated = [newChat, ...prev];
-          } else {
-            // Update existing chat
-            updated = [...prev];
-            updated[existingChatIndex] = {
-              ...updated[existingChatIndex],
-              lastMessage: messageText,
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              unread: selectedChat === senderPhone ? 0 : updated[existingChatIndex].unread + 1,
-              online: true
-            };
-            // Move to top
-            const updatedChat = updated.splice(existingChatIndex, 1)[0];
-            updated.unshift(updatedChat);
-          }
-          
-          localStorage.setItem('whatsapp-chats', JSON.stringify(updated));
-          return updated;
-        });
+        const chatUpdate = {
+          id: senderPhone,
+          name: senderName || senderPhone,
+          phone: senderPhone,
+          lastMessage: messageText,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          unread: selectedChat === senderPhone ? 0 : 1,
+          avatar: (senderName || senderPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+          online: true
+        };
+        
+        addOrUpdateChat(chatUpdate);
       }
       
       toast.success(`New message from ${senderName || senderPhone}!`);
@@ -823,12 +873,10 @@ const Messages = () => {
                               {message.status === 'failed' && (
                                 <svg className="h-3 w-3 text-red-300" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                </svg>
-                              )}
-                            </div>
+                            </svg>
                           )}
                         </div>
-                      </div>
+                      )}
                     </div>
                   ))
                 )}
