@@ -114,6 +114,11 @@ const Settings = () => {
     }
   };
 
+  const handleTestMessage = (data: any) => {
+    console.log('🧪 Test message received in Settings:', data);
+    toast.success('Test message sent successfully!');
+  };
+
   return (
     <div className="p-4 md:p-8">
       <div className="mb-8">
@@ -287,7 +292,7 @@ const Settings = () => {
         </div>
 
         {/* Test Message System */}
-        <TestMessage />
+        <TestMessage onTestMessage={handleTestMessage} />
       </div>
     </div>
   );
