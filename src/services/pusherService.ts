@@ -80,23 +80,57 @@ class PusherService {
   }
 
   subscribeToMessages(callback: (data: any) => void) {
-    console.log('📨 Setting up message subscription...');
+    console.log('📨 Setting up comprehensive message subscription...');
     this.messageCallback = callback;
     
     if (this.channel) {
-      // Bind to multiple event types for better compatibility
+      // Comprehensive list of event types for maximum compatibility
       const eventTypes = [
+        // Common message events
         'message-event',
         'new-message', 
         'incoming-message',
         'whatsapp-message',
         'message',
-        'webhook-message'
+        'webhook-message',
+        
+        // WhatsApp specific events
+        'whatsapp-webhook',
+        'whatsapp-incoming',
+        'wa-message',
+        'wa-webhook',
+        
+        // Generic webhook events
+        'webhook',
+        'webhook-event',
+        'incoming-webhook',
+        'message-webhook',
+        
+        // Facebook/Meta webhook events
+        'facebook-webhook',
+        'meta-webhook',
+        'graph-webhook',
+        
+        // Alternative naming patterns
+        'messageReceived',
+        'message_received',
+        'incoming_message',
+        'new_message',
+        'message_event',
+        
+        // Catch-all events
+        'data',
+        'payload',
+        'event'
       ];
 
       eventTypes.forEach(eventType => {
         this.channel.bind(eventType, (data: any) => {
-          console.log(`📨 Received ${eventType} event:`, data);
+          console.log(`📨 ===== PUSHER EVENT RECEIVED =====`);
+          console.log(`📨 Event Type: ${eventType}`);
+          console.log(`📨 Raw Data:`, JSON.stringify(data, null, 2));
+          console.log(`📨 ================================`);
+          
           if (this.messageCallback) {
             this.messageCallback(data);
           }
@@ -104,7 +138,7 @@ class PusherService {
         console.log(`📨 Bound to event: ${eventType}`);
       });
       
-      console.log('📨 Subscribed to message events on fastwapi-channel');
+      console.log(`📨 Subscribed to ${eventTypes.length} different event types on fastwapi-channel`);
     } else {
       console.warn('⚠️ Cannot subscribe - no channel available');
     }

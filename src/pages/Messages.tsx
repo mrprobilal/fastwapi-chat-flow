@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Search, Send, FileText, Paperclip, Smile, ArrowLeft } from 'lucide-react';
 import { usePusher } from '../hooks/usePusher';
@@ -164,89 +163,132 @@ const Messages = () => {
     }
   }, [location.state]);
 
-  // Enhanced message receiving with better debugging
+  // Enhanced message receiving with comprehensive webhook parsing
   useEffect(() => {
     const handleIncomingMessage = (data) => {
-      console.log('📨 Raw incoming message data:', data);
+      console.log('📨 ===== INCOMING MESSAGE DEBUG =====');
+      console.log('📨 Raw data:', JSON.stringify(data, null, 2));
       console.log('📨 Data type:', typeof data);
-      console.log('📨 Data keys:', Object.keys(data || {}));
+      console.log('📨 Data constructor:', data?.constructor?.name);
       
-      // Handle different message formats
+      // Enhanced message extraction with multiple fallback strategies
       let messageText = '';
       let senderPhone = '';
       let senderName = '';
+      let timestamp = new Date().toISOString();
       
-      // Try different property names for message text
-      if (data.message) messageText = data.message;
-      else if (data.text) messageText = data.text;
-      else if (data.body) messageText = data.body;
-      else if (data.content) messageText = data.content;
-      else if (data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body) {
-        messageText = data.entry[0].changes[0].value.messages[0].text.body;
-      }
-      
-      // Try different property names for sender phone
-      if (data.from) senderPhone = data.from;
-      else if (data.phone) senderPhone = data.phone;
-      else if (data.sender) senderPhone = data.sender;
-      else if (data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from) {
-        senderPhone = data.entry[0].changes[0].value.messages[0].from;
-      }
-      
-      // Try different property names for sender name
-      if (data.contact_name) senderName = data.contact_name;
-      else if (data.name) senderName = data.name;
-      else if (data.contact) senderName = data.contact;
-      else if (data.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name) {
-        senderName = data.entry[0].changes[0].value.contacts[0].profile.name;
-      }
-      
-      console.log('📨 Extracted data:', { messageText, senderPhone, senderName });
-      
-      if (!messageText || !senderPhone) {
-        console.warn('❌ Invalid message data received:', data);
-        toast.error('Received invalid message data');
-        return;
-      }
-      
-      const newMsg = {
-        id: Date.now() + Math.random(),
-        from: senderPhone,
-        to: 'business',
-        text: messageText,
-        timestamp: new Date().toISOString(),
-        type: 'received',
-        status: 'delivered',
-        contact_name: senderName
-      };
-      
-      console.log('✅ Processing incoming message:', newMsg);
-      
-      setMessages(prev => {
-        const updated = [...prev, newMsg];
-        localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-        console.log('💾 Messages saved, total:', updated.length);
-        return updated;
-      });
-      
-      // Add/update chat
-      if (senderPhone && senderPhone !== 'business') {
+      try {
+        // Strategy 1: Direct properties
+        if (data.message) messageText = data.message;
+        else if (data.text) messageText = data.text;
+        else if (data.body) messageText = data.body;
+        else if (data.content) messageText = data.content;
+        
+        // Strategy 2: WhatsApp webhook format
+        if (!messageText && data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
+          const message = data.entry[0].changes[0].value.messages[0];
+          messageText = message.text?.body || message.body || '';
+          
+          if (message.from) senderPhone = message.from;
+          if (message.timestamp) {
+            timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
+          }
+        }
+        
+        // Strategy 3: Alternative webhook formats
+        if (!messageText && data.messages?.[0]) {
+          messageText = data.messages[0].text?.body || data.messages[0].body || '';
+          senderPhone = data.messages[0].from || '';
+        }
+        
+        // Strategy 4: Nested message formats
+        if (!messageText && data.webhook?.messages?.[0]) {
+          messageText = data.webhook.messages[0].text?.body || data.webhook.messages[0].body || '';
+          senderPhone = data.webhook.messages[0].from || '';
+        }
+        
+        // Extract sender phone with multiple strategies
+        if (!senderPhone) {
+          if (data.from) senderPhone = data.from;
+          else if (data.phone) senderPhone = data.phone;
+          else if (data.sender) senderPhone = data.sender;
+          else if (data.number) senderPhone = data.number;
+          else if (data.contact?.phone) senderPhone = data.contact.phone;
+          else if (data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from) {
+            senderPhone = data.entry[0].changes[0].value.messages[0].from;
+          }
+        }
+        
+        // Extract sender name with multiple strategies
+        if (data.contact_name) senderName = data.contact_name;
+        else if (data.name) senderName = data.name;
+        else if (data.contact?.name) senderName = data.contact.name;
+        else if (data.profile?.name) senderName = data.profile.name;
+        else if (data.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name) {
+          senderName = data.entry[0].changes[0].value.contacts[0].profile.name;
+        }
+        
+        console.log('📨 Extracted values:');
+        console.log('  - Message:', messageText);
+        console.log('  - Phone:', senderPhone);
+        console.log('  - Name:', senderName);
+        console.log('  - Timestamp:', timestamp);
+        
+        // Validate extracted data
+        if (!messageText || !senderPhone) {
+          console.warn('❌ Missing required message data');
+          console.log('❌ messageText:', messageText);
+          console.log('❌ senderPhone:', senderPhone);
+          toast.error('Received invalid message data - missing text or phone');
+          return;
+        }
+        
+        // Format phone number
+        const formattedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`;
+        
+        const newMsg = {
+          id: Date.now() + Math.random(),
+          from: formattedPhone,
+          to: 'business',
+          text: messageText,
+          timestamp: timestamp,
+          type: 'received',
+          status: 'delivered',
+          contact_name: senderName || formattedPhone
+        };
+        
+        console.log('✅ Creating new message:', newMsg);
+        
+        // Add message to state and localStorage
+        setMessages(prev => {
+          const updated = [...prev, newMsg];
+          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+          console.log('💾 Messages saved, total:', updated.length);
+          return updated;
+        });
+        
+        // Add/update chat
         const chatUpdate = {
-          id: senderPhone,
-          name: senderName || senderPhone,
-          phone: senderPhone,
+          id: formattedPhone,
+          name: senderName || formattedPhone,
+          phone: formattedPhone,
           lastMessage: messageText,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          unread: selectedChat === senderPhone ? 0 : 1,
-          avatar: (senderName || senderPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+          unread: selectedChat === formattedPhone ? 0 : 1,
+          avatar: (senderName || formattedPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
           online: true
         };
         
         console.log('💬 Adding/updating chat:', chatUpdate);
         addOrUpdateChat(chatUpdate);
+        
+        toast.success(`📨 New message from ${senderName || formattedPhone}!`);
+        console.log('📨 ===== MESSAGE PROCESSING COMPLETE =====');
+        
+      } catch (error) {
+        console.error('❌ Error processing incoming message:', error);
+        toast.error(`Error processing message: ${error.message}`);
       }
-      
-      toast.success(`📨 New message from ${senderName || senderPhone}!`);
     };
 
     // Listen for test messages from the test component
