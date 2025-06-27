@@ -1,147 +1,89 @@
+export interface BusinessSettings {
+  pusherKey: string;
+  pusherSecret: string;
+  pusherAppId: string;
+  pusherCluster: string;
+  accessToken: string;
+  businessId: string;
+  phoneNumberId: string;
+  backendUrl: string;
+  backendToken: string;
+}
 
 class DatabaseService {
-  private settings: any = null;
-  private settingsChangeListeners: ((settings: any) => void)[] = [];
+  private storageKey = 'whatsapp-business-settings';
 
-  initializeSettings() {
+  getSettings(): BusinessSettings {
     try {
-      const savedSettings = localStorage.getItem('whatsapp-settings');
-      if (savedSettings) {
-        this.settings = JSON.parse(savedSettings);
-        console.log('📂 Settings loaded from localStorage');
-      } else {
-        // Initialize with default settings
-        this.settings = {
-          accessToken: '',
-          businessId: '',
-          phoneNumberId: '',
-          webhookVerifyToken: '',
-          backendUrl: '',
-          pusherAppId: '',
-          pusherKey: '',
-          pusherSecret: '',
-          pusherCluster: 'us2'
+      const stored = localStorage.getItem(this.storageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          // Set default Pusher values
+          pusherKey: parsed.pusherKey || '490510485d3b7c3874d4',
+          pusherSecret: parsed.pusherSecret || 'bdafa26e3b3d42f53d5c',
+          pusherAppId: parsed.pusherAppId || '2012752',
+          pusherCluster: parsed.pusherCluster || 'ap4',
+          // Keep existing WhatsApp API settings
+          accessToken: parsed.accessToken || '',
+          businessId: parsed.businessId || '',
+          phoneNumberId: parsed.phoneNumberId || '',
+          // Keep existing backend settings
+          backendUrl: parsed.backendUrl || '',
+          backendToken: parsed.backendToken || ''
         };
-        this.saveSettings();
-        console.log('✨ Default settings created');
       }
-    } catch (error) {
-      console.error('❌ Error initializing settings:', error);
-      this.settings = {
+      // Return default settings with Pusher configuration
+      return {
+        pusherKey: '490510485d3b7c3874d4',
+        pusherSecret: 'bdafa26e3b3d42f53d5c',
+        pusherAppId: '2012752',
+        pusherCluster: 'ap4',
         accessToken: '',
         businessId: '',
         phoneNumberId: '',
-        webhookVerifyToken: '',
         backendUrl: '',
-        pusherAppId: '',
-        pusherKey: '',
-        pusherSecret: '',
-        pusherCluster: 'us2'
+        backendToken: ''
+      };
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      return {
+        pusherKey: '490510485d3b7c3874d4',
+        pusherSecret: 'bdafa26e3b3d42f53d5c',
+        pusherAppId: '2012752',
+        pusherCluster: 'ap4',
+        accessToken: '',
+        businessId: '',
+        phoneNumberId: '',
+        backendUrl: '',
+        backendToken: ''
       };
     }
   }
 
-  getSettings() {
-    if (!this.settings) {
-      this.initializeSettings();
-    }
-    return this.settings;
-  }
-
-  updateSettings(newSettings: any) {
-    this.settings = { ...this.settings, ...newSettings };
-    this.saveSettings();
-    this.notifySettingsChange();
-    console.log('💾 Settings updated');
-  }
-
-  saveSettings(newSettings?: any) {
-    if (newSettings) {
-      this.settings = { ...this.settings, ...newSettings };
-    }
+  saveSettings(settings: BusinessSettings): void {
     try {
-      localStorage.setItem('whatsapp-settings', JSON.stringify(this.settings));
-      this.notifySettingsChange();
+      localStorage.setItem(this.storageKey, JSON.stringify(settings));
     } catch (error) {
-      console.error('❌ Error saving settings:', error);
+      console.error('Error saving settings:', error);
     }
   }
 
-  onSettingsChange(callback: (settings: any) => void) {
-    this.settingsChangeListeners.push(callback);
-    // Return unsubscribe function
-    return () => {
-      this.settingsChangeListeners = this.settingsChangeListeners.filter(
-        listener => listener !== callback
-      );
-    };
-  }
-
-  private notifySettingsChange() {
-    this.settingsChangeListeners.forEach(listener => {
-      listener(this.settings);
-    });
-  }
-
-  getLastSyncTime() {
+  getLastSyncTime(): Date | null {
     try {
-      const syncTime = localStorage.getItem('whatsapp-last-sync');
-      return syncTime ? new Date(syncTime) : null;
+      const stored = localStorage.getItem('last-sync-time');
+      return stored ? new Date(stored) : null;
     } catch (error) {
-      console.error('❌ Error getting last sync time:', error);
+      console.error('Error loading last sync time:', error);
       return null;
     }
   }
 
-  setLastSyncTime(time: Date) {
+  setLastSyncTime(date: Date): void {
     try {
-      localStorage.setItem('whatsapp-last-sync', time.toISOString());
+      localStorage.setItem('last-sync-time', date.toISOString());
     } catch (error) {
-      console.error('❌ Error setting last sync time:', error);
-    }
-  }
-
-  // Customer management methods
-  getCustomers() {
-    try {
-      const customers = localStorage.getItem('whatsapp-customers');
-      return customers ? JSON.parse(customers) : [];
-    } catch (error) {
-      console.error('❌ Error loading customers:', error);
-      return [];
-    }
-  }
-
-  saveCustomer(customer: any) {
-    try {
-      const customers = this.getCustomers();
-      const existingIndex = customers.findIndex((c: any) => c.phone === customer.phone);
-      
-      if (existingIndex >= 0) {
-        customers[existingIndex] = { ...customers[existingIndex], ...customer };
-      } else {
-        customers.push({
-          id: Date.now(),
-          ...customer,
-          createdAt: new Date().toISOString()
-        });
-      }
-      
-      localStorage.setItem('whatsapp-customers', JSON.stringify(customers));
-      console.log('💾 Customer saved:', customer.name);
-    } catch (error) {
-      console.error('❌ Error saving customer:', error);
-    }
-  }
-
-  deleteCustomer(customerId: number) {
-    try {
-      const customers = this.getCustomers();
-      const filtered = customers.filter((c: any) => c.id !== customerId);
-      localStorage.setItem('whatsapp-customers', JSON.stringify(filtered));
-      console.log('🗑️ Customer deleted:', customerId);
-    } catch (error) {
-      console.error('❌ Error deleting customer:', error);
+      console.error('Error saving last sync time:', error);
     }
   }
 }

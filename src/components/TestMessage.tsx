@@ -1,15 +1,15 @@
 
 import React, { useState } from 'react';
-import { Send, TestTube } from 'lucide-react';
+import { Send, TestTube, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TestMessage = () => {
-  const [testPhone, setTestPhone] = useState('+1234567890');
-  const [testMessage, setTestMessage] = useState('Hello! This is a test message from Pusher.');
+  const [testPhone, setTestPhone] = useState('+923049744702');
+  const [testMessage, setTestMessage] = useState('Hello! This is a test message from WhatsApp.');
   const [testName, setTestName] = useState('Test Contact');
 
   const sendTestMessage = () => {
-    // Simulate receiving a message via Pusher
+    // Simulate receiving a message via Pusher (simple format)
     const testData = {
       message: testMessage,
       from: testPhone,
@@ -21,6 +21,34 @@ const TestMessage = () => {
     window.dispatchEvent(new CustomEvent('test-pusher-message', { detail: testData }));
     
     toast.success('Test message sent! Check the Messages page.');
+  };
+
+  const sendWebhookFormatMessage = () => {
+    // Simulate WhatsApp webhook format
+    const webhookData = {
+      entry: [{
+        changes: [{
+          value: {
+            messages: [{
+              from: testPhone.replace(/\D/g, ''),
+              text: {
+                body: testMessage
+              },
+              timestamp: Math.floor(Date.now() / 1000).toString()
+            }],
+            contacts: [{
+              profile: {
+                name: testName
+              }
+            }]
+          }
+        }]
+      }]
+    };
+
+    window.dispatchEvent(new CustomEvent('test-pusher-message', { detail: webhookData }));
+    
+    toast.success('Webhook format test message sent!');
   };
 
   return (
@@ -37,7 +65,7 @@ const TestMessage = () => {
             value={testPhone}
             onChange={(e) => setTestPhone(e.target.value)}
             className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm"
-            placeholder="+1234567890"
+            placeholder="+923049744702"
           />
         </div>
         <div>
@@ -59,13 +87,22 @@ const TestMessage = () => {
             placeholder="Test message content..."
           />
         </div>
-        <button
-          onClick={sendTestMessage}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
-        >
-          <Send className="h-4 w-4" />
-          Send Test Message
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={sendTestMessage}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
+          >
+            <Send className="h-4 w-4" />
+            Send Simple Test
+          </button>
+          <button
+            onClick={sendWebhookFormatMessage}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
+          >
+            <Zap className="h-4 w-4" />
+            Send Webhook Format
+          </button>
+        </div>
       </div>
     </div>
   );

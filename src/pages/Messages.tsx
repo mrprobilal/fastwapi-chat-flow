@@ -162,14 +162,42 @@ const Messages = () => {
     }
   }, [location.state]);
 
-  // Enhanced message receiving
+  // Enhanced message receiving with better debugging
   useEffect(() => {
     const handleIncomingMessage = (data) => {
       console.log('📨 Raw incoming message data:', data);
+      console.log('📨 Data type:', typeof data);
+      console.log('📨 Data keys:', Object.keys(data || {}));
       
-      const messageText = data.message || data.text || data.body || data.content;
-      const senderPhone = data.from || data.phone || data.sender;
-      const senderName = data.contact_name || data.name || data.contact;
+      // Handle different message formats
+      let messageText = '';
+      let senderPhone = '';
+      let senderName = '';
+      
+      // Try different property names for message text
+      if (data.message) messageText = data.message;
+      else if (data.text) messageText = data.text;
+      else if (data.body) messageText = data.body;
+      else if (data.content) messageText = data.content;
+      else if (data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body) {
+        messageText = data.entry[0].changes[0].value.messages[0].text.body;
+      }
+      
+      // Try different property names for sender phone
+      if (data.from) senderPhone = data.from;
+      else if (data.phone) senderPhone = data.phone;
+      else if (data.sender) senderPhone = data.sender;
+      else if (data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from) {
+        senderPhone = data.entry[0].changes[0].value.messages[0].from;
+      }
+      
+      // Try different property names for sender name
+      if (data.contact_name) senderName = data.contact_name;
+      else if (data.name) senderName = data.name;
+      else if (data.contact) senderName = data.contact;
+      else if (data.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name) {
+        senderName = data.entry[0].changes[0].value.contacts[0].profile.name;
+      }
       
       console.log('📨 Extracted data:', { messageText, senderPhone, senderName });
       
@@ -231,9 +259,11 @@ const Messages = () => {
     // Subscribe to Pusher messages if connected
     if (isConnected) {
       console.log('🔌 Pusher connected, subscribing to messages...');
+      console.log('🔌 Pusher channel info:', pusherService.getChannelInfo?.() || 'No channel info available');
       subscribeToMessages(handleIncomingMessage);
     } else {
       console.log('❌ Pusher not connected, cannot subscribe to messages');
+      console.log('🔌 Connection state:', pusherService.getConnectionState?.() || 'Unknown');
     }
 
     return () => {

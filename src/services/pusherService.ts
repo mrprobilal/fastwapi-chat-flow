@@ -6,15 +6,19 @@ class PusherService {
   private channel: any = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
+  private messageCallback: ((data: any) => void) | null = null;
 
   connect(pusherKey: string, cluster: string) {
+    console.log('🔌 Connecting to Pusher with key:', pusherKey, 'cluster:', cluster);
+    
     if (this.pusher) {
       this.disconnect();
     }
 
     this.pusher = new Pusher(pusherKey, {
       cluster: cluster,
-      forceTLS: true
+      forceTLS: true,
+      enabledTransports: ['ws', 'wss']
     });
 
     this.channel = this.pusher.subscribe('fastwapi-channel');
@@ -22,6 +26,8 @@ class PusherService {
     // Handle connection events
     this.pusher.connection.bind('connected', () => {
       console.log('✅ Pusher connected successfully');
+      console.log('🔌 Connection state:', this.pusher?.connection.state);
+      console.log('📡 Channel subscribed:', this.channel?.name);
       this.reconnectAttempts = 0;
     });
 
@@ -37,6 +43,15 @@ class PusherService {
     this.pusher.connection.bind('failed', () => {
       console.error('❌ Pusher connection failed');
       this.handleReconnect();
+    });
+
+    // Handle channel events
+    this.channel.bind('pusher:subscription_succeeded', () => {
+      console.log('✅ Successfully subscribed to fastwapi-channel');
+    });
+
+    this.channel.bind('pusher:subscription_error', (error: any) => {
+      console.error('❌ Channel subscription error:', error);
     });
 
     return this.channel;
@@ -59,17 +74,35 @@ class PusherService {
       this.pusher.disconnect();
       this.pusher = null;
       this.channel = null;
+      this.messageCallback = null;
       this.reconnectAttempts = 0;
     }
   }
 
   subscribeToMessages(callback: (data: any) => void) {
+    console.log('📨 Setting up message subscription...');
+    this.messageCallback = callback;
+    
     if (this.channel) {
-      // Listen to multiple event types for better compatibility
-      this.channel.bind('message-event', callback);
-      this.channel.bind('new-message', callback);
-      this.channel.bind('incoming-message', callback);
-      this.channel.bind('whatsapp-message', callback);
+      // Bind to multiple event types for better compatibility
+      const eventTypes = [
+        'message-event',
+        'new-message', 
+        'incoming-message',
+        'whatsapp-message',
+        'message',
+        'webhook-message'
+      ];
+
+      eventTypes.forEach(eventType => {
+        this.channel.bind(eventType, (data: any) => {
+          console.log(`📨 Received ${eventType} event:`, data);
+          if (this.messageCallback) {
+            this.messageCallback(data);
+          }
+        });
+        console.log(`📨 Bound to event: ${eventType}`);
+      });
       
       console.log('📨 Subscribed to message events on fastwapi-channel');
     } else {
@@ -82,17 +115,15 @@ class PusherService {
       this.channel.unbind_all();
       console.log('📨 Unsubscribed from all message events');
     }
+    this.messageCallback = null;
   }
 
-  // Method to send messages through your FastWAPI backend
-  sendMessageToFastAPI(to: string, message: string) {
-    // This will be handled by your FastWAPI backend
-    // Just store locally and trigger Pusher event for now
-    console.log(`📤 Message to send via FastWAPI: ${message} -> ${to}`);
-    
-    // You can add your FastWAPI endpoint here when ready
-    // For now, we'll just handle it locally
-    return Promise.resolve();
+  // Method to manually trigger a test message (for debugging)
+  triggerTestMessage(data: any) {
+    console.log('🧪 Triggering test message:', data);
+    if (this.messageCallback) {
+      this.messageCallback(data);
+    }
   }
 
   isConnected() {
@@ -101,6 +132,14 @@ class PusherService {
 
   getConnectionState() {
     return this.pusher?.connection.state || 'disconnected';
+  }
+
+  getChannelInfo() {
+    return {
+      channelName: this.channel?.name,
+      subscribed: !!this.channel,
+      connected: this.isConnected()
+    };
   }
 }
 
