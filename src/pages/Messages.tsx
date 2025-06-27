@@ -1,12 +1,12 @@
-
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Search, Send } from 'lucide-react';
+import { MessageSquare, Search, Send, FileText } from 'lucide-react';
 import { usePusher } from '../hooks/usePusher';
 import { toast } from 'sonner';
 
 const Messages = () => {
   const [selectedChat, setSelectedChat] = useState(1);
   const [newMessage, setNewMessage] = useState('');
+  const [showTemplates, setShowTemplates] = useState(false);
   const [messages, setMessages] = useState([
     { id: 1, sender: 'customer', text: 'Hi, I need help with my order', time: '2:25 PM' },
     { id: 2, sender: 'business', text: 'Hello! I\'d be happy to help you with your order. Can you please provide your order number?', time: '2:26 PM' },
@@ -16,6 +16,12 @@ const Messages = () => {
   ]);
 
   const { isConnected, subscribeToMessages, unsubscribeFromMessages } = usePusher();
+
+  const templates = [
+    { id: 1, name: 'Welcome Message', content: 'Welcome! How can we help you today?' },
+    { id: 2, name: 'Order Status', content: 'Your order is being processed and will be shipped soon.' },
+    { id: 3, name: 'Thank You', content: 'Thank you for choosing our service!' },
+  ];
 
   const chats = [
     { id: 1, name: 'John Doe', phone: '+1234567890', lastMessage: 'Thank you for the quick response!', time: '2:30 PM', unread: 2 },
@@ -80,6 +86,40 @@ const Messages = () => {
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
+    }
+  };
+
+  const sendTemplate = async (template) => {
+    const messageData = {
+      id: Date.now(),
+      sender: 'business',
+      text: template.content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages(prev => [...prev, messageData]);
+    setShowTemplates(false);
+
+    try {
+      const response = await fetch('https://fastwapi.com/api/send-template', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          template_id: template.id,
+          phone: '+1234567890',
+        })
+      });
+
+      if (response.ok) {
+        toast.success('Template sent successfully!');
+      } else {
+        toast.error('Failed to send template');
+      }
+    } catch (error) {
+      console.error('Error sending template:', error);
+      toast.error('Failed to send template');
     }
   };
 
@@ -178,7 +218,30 @@ const Messages = () => {
             </div>
 
             <div className="p-4 border-t border-gray-200">
+              {showTemplates && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Quick Templates</h4>
+                  <div className="space-y-2">
+                    {templates.map((template) => (
+                      <button
+                        key={template.id}
+                        onClick={() => sendTemplate(template)}
+                        className="w-full text-left p-2 text-sm bg-white border border-gray-200 rounded hover:bg-gray-50"
+                      >
+                        <div className="font-medium">{template.name}</div>
+                        <div className="text-gray-500 text-xs truncate">{template.content}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowTemplates(!showTemplates)}
+                  className="bg-gray-100 text-gray-600 p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  <FileText className="h-4 w-4" />
+                </button>
                 <input
                   type="text"
                   value={newMessage}

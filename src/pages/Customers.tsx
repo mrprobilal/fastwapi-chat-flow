@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,8 +7,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Plus, Search, Phone, Mail } from 'lucide-react';
+import { Users, Plus, Search, Phone, Mail, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface Customer {
   id: string;
@@ -22,6 +22,7 @@ interface Customer {
 }
 
 const Customers = () => {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([
     {
       id: '1',
@@ -80,6 +81,12 @@ const Customers = () => {
     setNewCustomer({ name: '', phone: '', email: '', group: '' });
     setIsAddDialogOpen(false);
     toast.success('Customer added successfully');
+  };
+
+  const handleStartChat = (customer: Customer) => {
+    // Navigate to messages page and potentially pass customer data
+    navigate('/messages', { state: { selectedCustomer: customer } });
+    toast.success(`Opening chat with ${customer.name}`);
   };
 
   return (
@@ -224,6 +231,7 @@ const Customers = () => {
                 <TableHead>Group</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last Message</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -255,6 +263,17 @@ const Customers = () => {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-gray-500">{customer.lastMessage}</TableCell>
+                  <TableCell>
+                    <Button
+                      onClick={() => handleStartChat(customer)}
+                      size="sm"
+                      variant="outline"
+                      className="flex items-center gap-2"
+                    >
+                      <MessageCircle className="h-3 w-3" />
+                      Chat
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
