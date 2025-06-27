@@ -20,7 +20,16 @@ const Templates = () => {
   const handleSyncTemplates = async () => {
     setIsSyncing(true);
     try {
-      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+      // Always get fresh settings from localStorage
+      const settingsString = localStorage.getItem('fastwapi-settings');
+      if (!settingsString) {
+        toast.error('No API settings found. Please configure your settings first.');
+        setIsSyncing(false);
+        return;
+      }
+
+      const settings = JSON.parse(settingsString);
+      console.log('Using settings for sync:', { businessId: settings.businessId, hasToken: !!settings.accessToken });
       
       if (!settings.accessToken || !settings.businessId) {
         toast.error('Please configure your WhatsApp API settings first');
@@ -35,6 +44,8 @@ const Templates = () => {
           'Content-Type': 'application/json'
         }
       });
+
+      console.log('Templates sync response status:', response.status);
 
       if (response.ok) {
         const data = await response.json();
@@ -54,15 +65,18 @@ const Templates = () => {
           setTemplates(syncedTemplates);
           // Persist templates in localStorage
           localStorage.setItem('whatsapp-templates', JSON.stringify(syncedTemplates));
+          toast.success(`${syncedTemplates.length} templates synced successfully!`);
+        } else {
+          toast.success('Templates synced successfully! No templates found.');
         }
-        
-        toast.success('Templates synced successfully!');
       } else {
-        throw new Error(`API Error: ${response.status}`);
+        const errorData = await response.json();
+        console.error('Templates sync error response:', errorData);
+        toast.error(`Failed to sync templates: ${errorData.error?.message || 'API Error'}`);
       }
     } catch (error) {
       console.error('Sync error:', error);
-      toast.error('Failed to sync templates. Please check your API settings.');
+      toast.error('Failed to sync templates. Please check your API settings and try again.');
     } finally {
       setIsSyncing(false);
     }
