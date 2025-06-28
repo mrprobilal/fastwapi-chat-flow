@@ -5,7 +5,13 @@ import { databaseService } from './databaseService';
 class FastWAPIService {
   private getHeaders() {
     const settings = databaseService.getSettings();
-    const token = settings.backendToken || settings.accessToken || '';
+    // Use backendToken (FastWAPI token) instead of accessToken (WhatsApp token)
+    const token = settings.backendToken || '';
+    
+    if (!token) {
+      console.warn('⚠️ No FastWAPI backend token found in settings');
+    }
+    
     return {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -19,6 +25,7 @@ class FastWAPIService {
 
   async testConnection() {
     console.log('🔍 Testing FastWAPI connection...');
+    console.log('🔍 Using token:', this.getHeaders().Authorization?.substring(0, 20) + '...');
 
     try {
       const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getConversations/none?from=web_api`, {
@@ -151,6 +158,8 @@ class FastWAPIService {
 
   async getTemplates() {
     console.log('📋 Getting templates from FastWAPI...');
+    console.log('📋 Using token:', this.getHeaders().Authorization?.substring(0, 20) + '...');
+    console.log('📋 Backend URL:', this.getBaseUrl());
 
     try {
       const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getTemplates`, {
@@ -166,6 +175,11 @@ class FastWAPIService {
 
       const data = await response.json();
       console.log('✅ Templates received:', data);
+
+      // Check if response indicates error
+      if (data.status === 'error') {
+        throw new Error(data.message || 'Unknown error from FastWAPI');
+      }
 
       // Transform to our template format
       const templates = data.templates?.map((template: any) => ({
