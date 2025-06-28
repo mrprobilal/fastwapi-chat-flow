@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Save, TestTube, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -31,19 +30,32 @@ const Settings = () => {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
+  // Load settings on mount
   useEffect(() => {
     const loadInitialSettings = async () => {
-      await databaseService.initializeSettings();
-      const initialSettings = databaseService.getSettings();
-      if (initialSettings) {
-        console.log('🔧 Loading initial settings:', initialSettings);
-        setSettings(initialSettings);
+      try {
+        await databaseService.initializeSettings();
+        const initialSettings = databaseService.getSettings();
+        if (initialSettings) {
+          console.log('🔧 Loading initial settings:', initialSettings);
+          setSettings(initialSettings);
+          
+          // Check FastWAPI connection if token exists
+          if (initialSettings.backendToken) {
+            setConnectionStatus(prev => ({ ...prev, fastwapi: true }));
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error loading settings:', error);
+        toast.error('Failed to load settings');
       }
     };
 
     loadInitialSettings();
+  }, []);
 
-    // Check connections periodically
+  // Check connections periodically
+  useEffect(() => {
     const checkConnections = () => {
       setConnectionStatus(prev => ({
         ...prev,
@@ -70,11 +82,24 @@ const Settings = () => {
     setSaving(true);
     try {
       console.log('💾 Saving settings:', settings);
+      
+      // Validate required FastWAPI settings
+      if (settings.backendUrl && !settings.backendToken) {
+        toast.error('Backend token is required when backend URL is provided');
+        return;
+      }
+      
       await databaseService.saveSettings(settings);
       
       // Verify settings were saved
       const savedSettings = databaseService.getSettings();
       console.log('✅ Verified saved settings:', savedSettings);
+      
+      // Update connection status
+      setConnectionStatus(prev => ({
+        ...prev,
+        fastwapi: !!(savedSettings.backendToken)
+      }));
       
       toast.success('Settings saved successfully!');
     } catch (error) {
@@ -152,6 +177,13 @@ const Settings = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
             <h3 className="text-lg font-semibold text-gray-900">FastWAPI Backend</h3>
+            <div className="text-sm text-gray-500">
+              Status: {connectionStatus.fastwapi ? (
+                <span className="text-green-600 font-medium">Token Configured</span>
+              ) : (
+                <span className="text-red-600 font-medium">No Token</span>
+              )}
+            </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -178,14 +210,16 @@ const Settings = () => {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Backend Token</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Backend Token <span className="text-red-500">*</span>
+              </label>
               <div className="relative">
                 <Input
-                  type="text"
+                  type="password"
                   name="backendToken"
                   value={settings.backendToken}
                   onChange={handleInputChange}
-                  placeholder="Your FastWAPI token"
+                  placeholder="Your FastWAPI authentication token"
                   className="w-full pr-8"
                 />
                 {settings.backendToken && (
@@ -198,6 +232,9 @@ const Settings = () => {
                   </button>
                 )}
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Required for all FastWAPI operations
+              </p>
             </div>
           </div>
         </div>
@@ -326,6 +363,13 @@ const Settings = () => {
             <Save className="h-4 w-4" />
             {saving ? 'Saving...' : 'Save All Settings'}
           </button>
+          
+          {!settings.backendToken && (
+            <p className="text-amber-600 text-sm mt-2 flex items-center gap-1">
+              <XCircle className="h-4 w-4" />
+              FastWAPI backend token is required for templates and messaging
+            </p>
+          )}
         </div>
 
         {/* Connection Status */}

@@ -1,16 +1,17 @@
-
 import { toast } from 'sonner';
 import { databaseService } from './databaseService';
 
 class FastWAPIService {
   private getHeaders() {
     const settings = databaseService.getSettings();
-    // Use backendToken (FastWAPI token) instead of accessToken (WhatsApp token)
     const token = settings.backendToken || '';
     
     if (!token) {
       console.warn('⚠️ No FastWAPI backend token found in settings');
+      throw new Error('No FastWAPI backend token configured. Please add your token in Settings.');
     }
+    
+    console.log('🔑 Using FastWAPI token:', token.substring(0, 20) + '...');
     
     return {
       'Authorization': `Bearer ${token}`,
@@ -25,7 +26,6 @@ class FastWAPIService {
 
   async testConnection() {
     console.log('🔍 Testing FastWAPI connection...');
-    console.log('🔍 Using token:', this.getHeaders().Authorization?.substring(0, 20) + '...');
 
     try {
       const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getConversations/none?from=web_api`, {
@@ -158,8 +158,6 @@ class FastWAPIService {
 
   async getTemplates() {
     console.log('📋 Getting templates from FastWAPI...');
-    console.log('📋 Using token:', this.getHeaders().Authorization?.substring(0, 20) + '...');
-    console.log('📋 Backend URL:', this.getBaseUrl());
 
     try {
       const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getTemplates`, {
@@ -203,7 +201,8 @@ class FastWAPIService {
     console.log('📤 Sending template via FastWAPI:', { phone, templateName, variables });
 
     try {
-      const response = await fetch(`${this.getBaseUrl()}/api/wpbox/sendTemplateMessage`, {
+      // Use the correct endpoint for sending templates
+      const response = await fetch(`${this.getBaseUrl()}/api/wpbox/sendTemplate`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
@@ -216,6 +215,13 @@ class FastWAPIService {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Send template error response:', errorText);
+        
+        // If 404, try alternative endpoint
+        if (response.status === 404) {
+          console.log('🔄 Trying alternative template endpoint...');
+          return await this.sendTemplateAlternative(phone, templateName, variables);
+        }
+        
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
@@ -226,6 +232,38 @@ class FastWAPIService {
     } catch (error: any) {
       console.error('❌ FastWAPI template send error:', error);
       throw new Error(`Failed to send template: ${error.message}`);
+    }
+  }
+
+  private async sendTemplateAlternative(phone: string, templateName: string, variables: Record<string, string> = {}) {
+    console.log('📤 Trying alternative template endpoint...');
+
+    try {
+      const response = await fetch(`${this.getBaseUrl()}/api/wpbox/sendmessage`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          phone: phone,
+          message: `Template: ${templateName}`,
+          type: 'template',
+          template_name: templateName,
+          variables: variables
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Alternative template send error:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Template sent via alternative endpoint:', result);
+      
+      return result;
+    } catch (error: any) {
+      console.error('❌ Alternative template send failed:', error);
+      throw new Error(`Failed to send template via alternative method: ${error.message}`);
     }
   }
 
