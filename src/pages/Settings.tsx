@@ -30,65 +30,55 @@ const Settings = () => {
 
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    const initializeSettings = async () => {
-      // Initialize services
+    const loadInitialSettings = async () => {
       await databaseService.initializeSettings();
-      
-      // Load initial settings
       const initialSettings = databaseService.getSettings();
       if (initialSettings) {
-        setSettings(prevSettings => ({ ...prevSettings, ...initialSettings }));
+        console.log('🔧 Loading initial settings:', initialSettings);
+        setSettings(initialSettings);
       }
-      
-      setIsInitialized(true);
-
-      // Subscribe to settings changes only after initialization
-      unsubscribe = databaseService.onSettingsChange((newSettings) => {
-        if (newSettings && isInitialized) {
-          setSettings(prevSettings => ({ ...prevSettings, ...newSettings }));
-        }
-      });
     };
 
-    initializeSettings();
+    loadInitialSettings();
 
-    // Check connections
+    // Check connections periodically
     const checkConnections = () => {
       setConnectionStatus(prev => ({
         ...prev,
         pusher: pusherService.isConnected(),
-        fastwapi: !!(settings.backendToken || settings.accessToken)
+        fastwapi: !!(settings.backendToken)
       }));
     };
 
     const connectionInterval = setInterval(checkConnections, 2000);
-
-    return () => {
-      clearInterval(connectionInterval);
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [settings.backendToken, settings.accessToken]);
+    return () => clearInterval(connectionInterval);
+  }, [settings.backendToken]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    console.log(`Input change: ${name} = ${value}`);
-    setSettings(prev => ({ ...prev, [name]: value }));
+    console.log(`🔧 Input change: ${name} = ${value}`);
+    setSettings(prev => {
+      const updated = { ...prev, [name]: value };
+      console.log('🔧 Updated settings state:', updated);
+      return updated;
+    });
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      console.log('💾 Saving settings:', settings);
       await databaseService.saveSettings(settings);
+      
+      // Verify settings were saved
+      const savedSettings = databaseService.getSettings();
+      console.log('✅ Verified saved settings:', savedSettings);
+      
       toast.success('Settings saved successfully!');
     } catch (error) {
-      console.error('Failed to save settings:', error);
+      console.error('❌ Failed to save settings:', error);
       toast.error('Failed to save settings');
     } finally {
       setSaving(false);
@@ -122,6 +112,9 @@ const Settings = () => {
     try {
       console.log('🔄 Starting manual sync from Settings...');
       
+      // First save current settings to ensure backend token is available
+      await databaseService.saveSettings(settings);
+      
       // Sync contacts and message history
       const { messages, chats } = await whatsappService.syncAllMessageHistory();
       
@@ -137,6 +130,14 @@ const Settings = () => {
   const handleTestMessage = (data: any) => {
     console.log('🧪 Test message received in Settings:', data);
     toast.success('Test message sent successfully!');
+  };
+
+  const clearField = (fieldName: string) => {
+    console.log(`🧹 Clearing field: ${fieldName}`);
+    setSettings(prev => ({
+      ...prev,
+      [fieldName]: ''
+    }));
   };
 
   return (
@@ -156,25 +157,47 @@ const Settings = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Backend URL</label>
-              <Input
-                type="text"
-                name="backendUrl"
-                value={settings.backendUrl}
-                onChange={handleInputChange}
-                placeholder="https://fastwapi.com"
-                className="w-full"
-              />
+              <div className="relative">
+                <Input
+                  type="text"
+                  name="backendUrl"
+                  value={settings.backendUrl}
+                  onChange={handleInputChange}
+                  placeholder="https://fastwapi.com"
+                  className="w-full pr-8"
+                />
+                {settings.backendUrl && (
+                  <button
+                    type="button"
+                    onClick={() => clearField('backendUrl')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Backend Token</label>
-              <Input
-                type="text"
-                name="backendToken"
-                value={settings.backendToken}
-                onChange={handleInputChange}
-                placeholder="Your FastWAPI token"
-                className="w-full"
-              />
+              <div className="relative">
+                <Input
+                  type="text"
+                  name="backendToken"
+                  value={settings.backendToken}
+                  onChange={handleInputChange}
+                  placeholder="Your FastWAPI token"
+                  className="w-full pr-8"
+                />
+                {settings.backendToken && (
+                  <button
+                    type="button"
+                    onClick={() => clearField('backendToken')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -204,120 +227,105 @@ const Settings = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Access Token</label>
-              <Input
-                type="text"
-                name="accessToken"
-                value={settings.accessToken}
-                onChange={handleInputChange}
-                placeholder="WhatsApp Business API Access Token"
-                className="w-full"
-              />
+              <div className="relative">
+                <Input
+                  type="text"
+                  name="accessToken"
+                  value={settings.accessToken}
+                  onChange={handleInputChange}
+                  placeholder="WhatsApp Business API Access Token"
+                  className="w-full pr-8"
+                />
+                {settings.accessToken && (
+                  <button
+                    type="button"
+                    onClick={() => clearField('accessToken')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Business ID</label>
-              <Input
-                type="text"
-                name="businessId"
-                value={settings.businessId}
-                onChange={handleInputChange}
-                placeholder="WhatsApp Business Account ID"
-                className="w-full"
-              />
+              <div className="relative">
+                <Input
+                  type="text"
+                  name="businessId"
+                  value={settings.businessId}
+                  onChange={handleInputChange}
+                  placeholder="WhatsApp Business Account ID"
+                  className="w-full pr-8"
+                />
+                {settings.businessId && (
+                  <button
+                    type="button"
+                    onClick={() => clearField('businessId')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number ID</label>
-              <Input
-                type="text"
-                name="phoneNumberId"
-                value={settings.phoneNumberId}
-                onChange={handleInputChange}
-                placeholder="WhatsApp Business Phone Number ID"
-                className="w-full"
-              />
+              <div className="relative">
+                <Input
+                  type="text"
+                  name="phoneNumberId"
+                  value={settings.phoneNumberId}
+                  onChange={handleInputChange}
+                  placeholder="WhatsApp Business Phone Number ID"
+                  className="w-full pr-8"
+                />
+                {settings.phoneNumberId && (
+                  <button
+                    type="button"
+                    onClick={() => clearField('phoneNumberId')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Webhook Verify Token</label>
-              <Input
-                type="text"
-                name="webhookVerifyToken"
-                value={settings.webhookVerifyToken}
-                onChange={handleInputChange}
-                placeholder="Webhook verification token"
-                className="w-full"
-              />
+              <div className="relative">
+                <Input
+                  type="text"
+                  name="webhookVerifyToken"
+                  value={settings.webhookVerifyToken}
+                  onChange={handleInputChange}
+                  placeholder="Webhook verification token"
+                  className="w-full pr-8"
+                />
+                {settings.webhookVerifyToken && (
+                  <button
+                    type="button"
+                    onClick={() => clearField('webhookVerifyToken')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Pusher Settings */}
+        {/* Save Button */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-            <h3 className="text-lg font-semibold text-gray-900">Pusher Real-time Settings</h3>
-            <button
-              onClick={testPusherConnection}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
-            >
-              <TestTube className="h-4 w-4" />
-              Test Connection
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher App ID</label>
-              <Input
-                type="text"
-                name="pusherAppId"
-                value={settings.pusherAppId}
-                onChange={handleInputChange}
-                placeholder="Pusher app ID"
-                className="w-full"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Key</label>
-              <Input
-                type="text"
-                name="pusherKey"
-                value={settings.pusherKey}
-                onChange={handleInputChange}
-                placeholder="Pusher app key"
-                className="w-full"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Secret</label>
-              <Input
-                type="password"
-                name="pusherSecret"
-                value={settings.pusherSecret}
-                onChange={handleInputChange}
-                placeholder="Pusher app secret"
-                className="w-full"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Cluster</label>
-              <Input
-                type="text"
-                name="pusherCluster"
-                value={settings.pusherCluster}
-                onChange={handleInputChange}
-                placeholder="Pusher cluster"
-                className="w-full"
-              />
-            </div>
-          </div>
-          
-          <div className="mt-4">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Settings'}
-            </button>
-          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            {saving ? 'Saving...' : 'Save All Settings'}
+          </button>
         </div>
 
         {/* Connection Status */}
@@ -364,18 +372,6 @@ const Settings = () => {
               </p>
             </div>
           </div>
-        </div>
-
-        {/* Save Button */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-          >
-            <Save className="h-4 w-4" />
-            {saving ? 'Saving...' : 'Save All Settings'}
-          </button>
         </div>
 
         {/* Test Message System */}
