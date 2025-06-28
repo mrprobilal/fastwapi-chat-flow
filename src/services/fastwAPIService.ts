@@ -4,7 +4,6 @@ import { databaseService } from './databaseService';
 class FastWAPIService {
   private getHeaders() {
     const settings = databaseService.getSettings();
-    // Use the backendToken (which is the FastWAPI login token) instead of accessToken
     const token = settings.backendToken || settings.accessToken || '';
     return {
       'Authorization': `Bearer ${token}`,
@@ -28,8 +27,9 @@ class FastWAPIService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`HTTP ${response.status}: ${errorData.message || response.statusText}`);
+        const errorText = await response.text();
+        console.error('FastWAPI error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -37,11 +37,6 @@ class FastWAPIService {
       return data;
     } catch (error: any) {
       console.error('❌ FastWAPI connection failed:', error);
-      
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        throw new Error('Cannot connect to FastWAPI. Please check your internet connection.');
-      }
-      
       throw new Error(`FastWAPI connection failed: ${error.message}`);
     }
   }
@@ -57,8 +52,9 @@ class FastWAPIService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`HTTP ${response.status}: ${errorData.message || response.statusText}`);
+        const errorText = await response.text();
+        console.error('Get conversations error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -96,8 +92,9 @@ class FastWAPIService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`HTTP ${response.status}: ${errorData.message || response.statusText}`);
+        const errorText = await response.text();
+        console.error('Get messages error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -136,8 +133,9 @@ class FastWAPIService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`HTTP ${response.status}: ${errorData.message || response.statusText}`);
+        const errorText = await response.text();
+        console.error('Send message error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const result = await response.json();
@@ -154,15 +152,16 @@ class FastWAPIService {
     console.log('📋 Getting templates from FastWAPI...');
 
     try {
-      // Use GET method instead of POST as the API expects GET
       const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getTemplates`, {
-        method: 'GET',
-        headers: this.getHeaders()
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({})
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`HTTP ${response.status}: ${errorData.message || response.statusText}`);
+        const errorText = await response.text();
+        console.error('Get templates error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -190,7 +189,6 @@ class FastWAPIService {
     console.log('📤 Sending template via FastWAPI:', { phone, templateName, variables });
 
     try {
-      // Try the correct template sending endpoint
       const response = await fetch(`${this.getBaseUrl()}/api/wpbox/sendTemplateMessage`, {
         method: 'POST',
         headers: this.getHeaders(),
@@ -202,25 +200,9 @@ class FastWAPIService {
       });
 
       if (!response.ok) {
-        // If that doesn't work, try alternative endpoint
-        const altResponse = await fetch(`${this.getBaseUrl()}/api/wpbox/template/send`, {
-          method: 'POST',
-          headers: this.getHeaders(),
-          body: JSON.stringify({
-            phone: phone,
-            template: templateName,
-            parameters: variables
-          })
-        });
-
-        if (!altResponse.ok) {
-          const errorData = await altResponse.json();
-          throw new Error(`HTTP ${altResponse.status}: ${errorData.message || altResponse.statusText}`);
-        }
-
-        const result = await altResponse.json();
-        console.log('✅ Template sent via FastWAPI (alternative endpoint):', result);
-        return result;
+        const errorText = await response.text();
+        console.error('Send template error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const result = await response.json();

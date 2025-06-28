@@ -1,11 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Save, TestTube, CheckCircle, XCircle, RefreshCw, LogIn, LogOut } from 'lucide-react';
+import { Save, TestTube, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { pusherService } from '../services/pusherService';
 import { whatsappService } from '../services/whatsappService';
 import { databaseService } from '../services/databaseService';
-import { fastwapiAuthService } from '../services/fastwapiAuthService';
 import TestMessage from '../components/TestMessage';
 import { Input } from '../components/ui/input';
 
@@ -23,11 +22,6 @@ const Settings = () => {
     pusherCluster: 'ap4',
   });
 
-  const [loginCredentials, setLoginCredentials] = useState({
-    email: '',
-    password: ''
-  });
-
   const [connectionStatus, setConnectionStatus] = useState({
     pusher: false,
     whatsapp: false,
@@ -36,7 +30,6 @@ const Settings = () => {
 
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [loggingIn, setLoggingIn] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -69,7 +62,7 @@ const Settings = () => {
       setConnectionStatus(prev => ({
         ...prev,
         pusher: pusherService.isConnected(),
-        fastwapi: fastwapiAuthService.isLoggedIn()
+        fastwapi: !!(settings.backendToken || settings.accessToken)
       }));
     };
 
@@ -81,44 +74,12 @@ const Settings = () => {
         unsubscribe();
       }
     };
-  }, []);
+  }, [settings.backendToken, settings.accessToken]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     console.log(`Input change: ${name} = ${value}`);
     setSettings(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleLoginInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setLoginCredentials(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleFastWAPILogin = async () => {
-    if (!loginCredentials.email || !loginCredentials.password) {
-      toast.error('Please enter both email and password');
-      return;
-    }
-
-    setLoggingIn(true);
-    try {
-      const result = await fastwapiAuthService.login(loginCredentials.email, loginCredentials.password);
-      
-      if (result.status) {
-        setConnectionStatus(prev => ({ ...prev, fastwapi: true }));
-        // Clear login form
-        setLoginCredentials({ email: '', password: '' });
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
-    } finally {
-      setLoggingIn(false);
-    }
-  };
-
-  const handleFastWAPILogout = () => {
-    fastwapiAuthService.logout();
-    setConnectionStatus(prev => ({ ...prev, fastwapi: false }));
   };
 
   const handleSave = async () => {
@@ -182,63 +143,16 @@ const Settings = () => {
     <div className="p-4 md:p-8">
       <div className="mb-8">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-600 mt-2">Configure your FastWAPI authentication and WhatsApp Business API settings</p>
+        <p className="text-gray-600 mt-2">Configure your FastWAPI backend and WhatsApp Business API settings</p>
       </div>
 
       <div className="space-y-6">
-        {/* FastWAPI Authentication */}
+        {/* FastWAPI Backend Settings */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-            <h3 className="text-lg font-semibold text-gray-900">FastWAPI Authentication</h3>
-            <div className="flex gap-2">
-              {connectionStatus.fastwapi ? (
-                <button
-                  onClick={handleFastWAPILogout}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 text-sm"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Logout
-                </button>
-              ) : (
-                <button
-                  onClick={handleFastWAPILogin}
-                  disabled={loggingIn}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
-                >
-                  <LogIn className="h-4 w-4" />
-                  {loggingIn ? 'Logging in...' : 'Login'}
-                </button>
-              )}
-            </div>
+            <h3 className="text-lg font-semibold text-gray-900">FastWAPI Backend</h3>
           </div>
           
-          {!connectionStatus.fastwapi && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                <Input
-                  type="email"
-                  name="email"
-                  value={loginCredentials.email}
-                  onChange={handleLoginInputChange}
-                  placeholder="your@email.com"
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                <Input
-                  type="password"
-                  name="password"
-                  value={loginCredentials.password}
-                  onChange={handleLoginInputChange}
-                  placeholder="Your password"
-                  className="w-full"
-                />
-              </div>
-            </div>
-          )}
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Backend URL</label>
@@ -252,15 +166,14 @@ const Settings = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Access Token</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Backend Token</label>
               <Input
                 type="text"
-                name="accessToken"
-                value={settings.accessToken}
+                name="backendToken"
+                value={settings.backendToken}
                 onChange={handleInputChange}
-                placeholder="Auto-filled after login"
+                placeholder="Your FastWAPI token"
                 className="w-full"
-                disabled
               />
             </div>
           </div>
@@ -290,6 +203,17 @@ const Settings = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Access Token</label>
+              <Input
+                type="text"
+                name="accessToken"
+                value={settings.accessToken}
+                onChange={handleInputChange}
+                placeholder="WhatsApp Business API Access Token"
+                className="w-full"
+              />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Business ID</label>
               <Input
                 type="text"
@@ -311,7 +235,7 @@ const Settings = () => {
                 className="w-full"
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Webhook Verify Token</label>
               <Input
                 type="text"
@@ -410,7 +334,7 @@ const Settings = () => {
                 <span className={`text-sm font-medium ${connectionStatus.fastwapi ? 'text-green-800' : 'text-red-800'}`}>FastWAPI</span>
               </div>
               <p className={`text-xs mt-1 ${connectionStatus.fastwapi ? 'text-green-600' : 'text-red-600'}`}>
-                {connectionStatus.fastwapi ? 'Authenticated' : 'Not authenticated'}
+                {connectionStatus.fastwapi ? 'Token configured' : 'No token configured'}
               </p>
             </div>
             <div className={`p-4 rounded-lg border ${connectionStatus.whatsapp ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
