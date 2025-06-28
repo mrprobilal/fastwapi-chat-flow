@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Save, TestTube, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,39 +29,40 @@ const Settings = () => {
 
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    const initializeSettings = async () => {
-      // Initialize services
-      await databaseService.initializeSettings();
+    const loadSettings = () => {
+      console.log('🔄 Loading settings...');
+      const savedSettings = databaseService.getSettings();
+      console.log('📋 Loaded settings:', savedSettings);
       
-      // Load initial settings
-      const initialSettings = databaseService.getSettings();
-      if (initialSettings) {
-        setSettings(prevSettings => ({ ...prevSettings, ...initialSettings }));
+      if (savedSettings) {
+        setSettings({
+          accessToken: savedSettings.accessToken || '',
+          businessId: savedSettings.businessId || '',
+          phoneNumberId: savedSettings.phoneNumberId || '',
+          webhookVerifyToken: savedSettings.webhookVerifyToken || '',
+          backendUrl: savedSettings.backendUrl || 'https://fastwapi.com',
+          backendToken: savedSettings.backendToken || '',
+          pusherAppId: savedSettings.pusherAppId || '2012752',
+          pusherKey: savedSettings.pusherKey || '490510485d3b7c3874d4',
+          pusherSecret: savedSettings.pusherSecret || 'bdafa26e3b3d42f53d5c',
+          pusherCluster: savedSettings.pusherCluster || 'ap4',
+        });
       }
-      
-      setIsInitialized(true);
-
-      // Subscribe to settings changes only after initialization
-      unsubscribe = databaseService.onSettingsChange((newSettings) => {
-        if (newSettings && isInitialized) {
-          setSettings(prevSettings => ({ ...prevSettings, ...newSettings }));
-        }
-      });
     };
 
-    initializeSettings();
+    // Initialize database service and load settings
+    databaseService.initializeSettings();
+    loadSettings();
 
-    // Check connections
+    // Check connections periodically
     const checkConnections = () => {
       setConnectionStatus(prev => ({
         ...prev,
         pusher: pusherService.isConnected(),
-        fastwapi: !!(settings.backendToken || settings.accessToken)
+        fastwapi: !!(settings.backendToken),
+        whatsapp: !!(settings.accessToken && settings.businessId && settings.phoneNumberId)
       }));
     };
 
@@ -70,25 +70,35 @@ const Settings = () => {
 
     return () => {
       clearInterval(connectionInterval);
-      if (unsubscribe) {
-        unsubscribe();
-      }
     };
-  }, [settings.backendToken, settings.accessToken]);
+  }, [settings.backendToken, settings.accessToken, settings.businessId, settings.phoneNumberId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    console.log(`Input change: ${name} = ${value}`);
-    setSettings(prev => ({ ...prev, [name]: value }));
+    console.log(`📝 Input change: ${name} = ${value.substring(0, 20)}...`);
+    
+    setSettings(prev => {
+      const updated = { ...prev, [name]: value };
+      console.log('📋 Updated settings state:', updated);
+      return updated;
+    });
   };
 
   const handleSave = async () => {
     setSaving(true);
+    console.log('💾 Saving settings:', settings);
+    
     try {
-      await databaseService.saveSettings(settings);
+      // Save to database service
+      databaseService.saveSettings(settings);
+      
+      // Verify the save worked
+      const savedSettings = databaseService.getSettings();
+      console.log('✅ Settings saved successfully:', savedSettings);
+      
       toast.success('Settings saved successfully!');
     } catch (error) {
-      console.error('Failed to save settings:', error);
+      console.error('❌ Failed to save settings:', error);
       toast.error('Failed to save settings');
     } finally {
       setSaving(false);
@@ -177,6 +187,17 @@ const Settings = () => {
               />
             </div>
           </div>
+          
+          <div className="mt-4">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              {saving ? 'Saving...' : 'Save FastWAPI Settings'}
+            </button>
+          </div>
         </div>
 
         {/* WhatsApp Business API Settings */}
@@ -247,6 +268,17 @@ const Settings = () => {
               />
             </div>
           </div>
+          
+          <div className="mt-4">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              {saving ? 'Saving...' : 'Save WhatsApp Settings'}
+            </button>
+          </div>
         </div>
 
         {/* Pusher Settings */}
@@ -315,7 +347,7 @@ const Settings = () => {
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <Save className="h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Settings'}
+              {saving ? 'Saving...' : 'Save Pusher Settings'}
             </button>
           </div>
         </div>
@@ -366,7 +398,7 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* Save Button */}
+        {/* Save All Button */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <button
             onClick={handleSave}
