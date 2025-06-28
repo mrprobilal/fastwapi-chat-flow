@@ -4,8 +4,10 @@ import { databaseService } from './databaseService';
 class FastWAPIService {
   private getHeaders() {
     const settings = databaseService.getSettings();
+    // Use the backendToken (which is the FastWAPI login token) instead of accessToken
+    const token = settings.backendToken || settings.accessToken || '';
     return {
-      'Authorization': `Bearer ${settings.accessToken || ''}`,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     };
   }

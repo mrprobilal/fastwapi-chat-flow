@@ -1,4 +1,3 @@
-
 export interface BusinessSettings {
   pusherKey: string;
   pusherSecret: string;
@@ -7,6 +6,7 @@ export interface BusinessSettings {
   accessToken: string;
   businessId: string;
   phoneNumberId: string;
+  webhookVerifyToken: string;
   backendUrl: string;
   backendToken: string;
 }
@@ -49,8 +49,9 @@ class DatabaseService {
           accessToken: parsed.accessToken || '',
           businessId: parsed.businessId || '',
           phoneNumberId: parsed.phoneNumberId || '',
+          webhookVerifyToken: parsed.webhookVerifyToken || '',
           // Keep existing backend settings
-          backendUrl: parsed.backendUrl || '',
+          backendUrl: parsed.backendUrl || 'https://fastwapi.com',
           backendToken: parsed.backendToken || ''
         };
       }
@@ -63,7 +64,8 @@ class DatabaseService {
         accessToken: '',
         businessId: '',
         phoneNumberId: '',
-        backendUrl: '',
+        webhookVerifyToken: '',
+        backendUrl: 'https://fastwapi.com',
         backendToken: ''
       };
     } catch (error) {
@@ -76,7 +78,8 @@ class DatabaseService {
         accessToken: '',
         businessId: '',
         phoneNumberId: '',
-        backendUrl: '',
+        webhookVerifyToken: '',
+        backendUrl: 'https://fastwapi.com',
         backendToken: ''
       };
     }
