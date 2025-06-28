@@ -1,3 +1,4 @@
+
 import { toast } from 'sonner';
 import { databaseService } from './databaseService';
 
@@ -153,9 +154,8 @@ class FastWAPIService {
 
     try {
       const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getTemplates`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({})
+        method: 'GET',
+        headers: this.getHeaders()
       });
 
       if (!response.ok) {
