@@ -32,66 +32,38 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      console.log('🔐 Attempting login with:', { email: formData.email, password: '***' });
-      console.log('🌐 FastWAPI URL:', 'https://fastwapi.com/api/login');
+      console.log('Sending login request with:', formData);
       
-      // Add a timeout to the fetch request
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
       const response = await fetch('https://fastwapi.com/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
         body: JSON.stringify(formData),
-        signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-      console.log('📡 Response status:', response.status);
-      console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ HTTP Error Response:', errorText);
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
       const data = await response.json();
-      console.log('✅ Login API response:', data);
+      console.log('Login API response:', data);
 
-      if (data.status === true) {
-        // Handle successful login
+      if (response.ok && data.status === true) {
+        // Handle successful login - API returns user data directly in response
         const userData = {
           id: data.id.toString(),
           email: data.email,
           name: data.name
         };
         
-        console.log('🎉 Login successful, user data:', userData);
+        console.log('Login successful, user data:', userData);
         login(userData, data.token);
         toast.success('Login successful!');
         navigate('/');
       } else {
-        console.log('❌ Login failed:', data);
-        toast.error(data.errMsg || data.message || 'Invalid credentials');
+        console.log('Login failed:', data);
+        toast.error(data.errMsg || data.message || 'Login failed');
       }
-    } catch (error: any) {
-      console.error('🚨 Login error details:', error);
-      
-      let errorMessage = 'Network error. Please try again.';
-      
-      if (error.name === 'AbortError') {
-        errorMessage = 'Request timed out. Please check your connection and try again.';
-      } else if (error.message.includes('fetch')) {
-        errorMessage = 'Cannot connect to FastWAPI server. Please check if the server is running and accessible.';
-      } else if (error.message.includes('CORS')) {
-        errorMessage = 'CORS error. The FastWAPI server needs to allow requests from this domain.';
-      }
-      
-      toast.error(errorMessage);
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error('Network error. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -160,18 +132,6 @@ const Login = () => {
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
-
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <h4 className="font-medium text-blue-800 mb-2">Connection Issues?</h4>
-            <p className="text-sm text-blue-700">
-              If you're experiencing network errors, please:
-            </p>
-            <ul className="text-sm text-blue-700 mt-2 space-y-1">
-              <li>• Check if fastwapi.com is accessible in your browser</li>
-              <li>• Ensure your FastWAPI server is running</li>
-              <li>• Contact FastWAPI support if the issue persists</li>
-            </ul>
-          </div>
 
           <div className="mt-6 text-center text-sm text-gray-600">
             <p>Don't have an account?</p>

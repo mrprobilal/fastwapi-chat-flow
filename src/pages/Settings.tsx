@@ -52,13 +52,11 @@ const Settings = () => {
       }
     };
 
-    // Initialize database service and load settings only once
+    // Initialize database service and load settings
     databaseService.initializeSettings();
     loadSettings();
-  }, []); // Remove all dependencies to prevent reloading
 
-  // Separate effect for checking connections
-  useEffect(() => {
+    // Check connections periodically
     const checkConnections = () => {
       setConnectionStatus(prev => ({
         ...prev,
@@ -69,7 +67,10 @@ const Settings = () => {
     };
 
     const connectionInterval = setInterval(checkConnections, 2000);
-    return () => clearInterval(connectionInterval);
+
+    return () => {
+      clearInterval(connectionInterval);
+    };
   }, [settings.backendToken, settings.accessToken, settings.businessId, settings.phoneNumberId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
