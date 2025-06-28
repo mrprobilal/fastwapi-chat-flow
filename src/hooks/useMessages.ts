@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { usePusher } from './usePusher';
 import { fastwAPIService } from '../services/fastwAPIService';
@@ -53,6 +52,104 @@ export const useMessages = () => {
       return deduplicated;
     });
   }, [normalizePhoneNumber, deduplicateChats]);
+
+  // Enhanced message handling for webhook events
+  const handleIncomingMessage = useCallback((data) => {
+    console.log('🚨 Webhook Message Received:', data);
+    
+    try {
+      let messageText = '';
+      let senderPhone = '';
+      let senderName = '';
+      let timestamp = new Date().toISOString();
+      
+      // Handle webhook format: { from: "phone", text: "message" }
+      if (data.from && data.text) {
+        messageText = data.text;
+        senderPhone = data.from;
+        senderName = data.name || data.from;
+      }
+      // Handle FastWAPI format
+      else if (data.value && data.phone) {
+        messageText = data.value;
+        senderPhone = data.phone;
+        senderName = data.contact_name || data.name;
+        timestamp = data.created_at || timestamp;
+      }
+      // Handle nested message format
+      else if (data.message) {
+        messageText = data.message.value || data.message.text || data.message;
+        senderPhone = data.message.phone || data.phone;
+        senderName = data.message.contact_name || data.contact_name;
+        timestamp = data.message.created_at || data.created_at || timestamp;
+      }
+      // Try to extract from any nested structure
+      else {
+        const extractValue = (obj, key) => {
+          if (!obj || typeof obj !== 'object') return null;
+          if (obj[key]) return obj[key];
+          for (const prop in obj) {
+            if (typeof obj[prop] === 'object') {
+              const result = extractValue(obj[prop], key);
+              if (result) return result;
+            }
+          }
+          return null;
+        };
+
+        messageText = extractValue(data, 'value') || extractValue(data, 'text') || extractValue(data, 'message') || '';
+        senderPhone = extractValue(data, 'phone') || extractValue(data, 'from') || '';
+        senderName = extractValue(data, 'contact_name') || extractValue(data, 'name') || '';
+      }
+      
+      if (messageText && senderPhone) {
+        const formattedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`;
+        
+        const newMsg = {
+          id: Date.now() + Math.random(),
+          from: formattedPhone,
+          to: 'business',
+          text: messageText,
+          timestamp: timestamp,
+          type: 'received',
+          status: 'delivered',
+          contact_name: senderName || formattedPhone
+        };
+        
+        console.log('✅ Processed webhook message:', newMsg);
+        
+        // Add message
+        setMessages(prev => {
+          const updated = [...prev, newMsg];
+          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+          return updated;
+        });
+        
+        // Add/update chat
+        const chatUpdate = {
+          id: formattedPhone,
+          name: senderName || formattedPhone,
+          phone: formattedPhone,
+          lastMessage: messageText,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          unread: 1,
+          avatar: (senderName || formattedPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+          online: true
+        };
+        
+        addOrUpdateChat(chatUpdate);
+        toast.success(`📨 New message from ${senderName || formattedPhone}: ${messageText.substring(0, 50)}...`);
+        
+      } else {
+        console.error('❌ Could not extract message data:', data);
+        toast.error('⚠️ Received data but couldn\'t parse message');
+      }
+      
+    } catch (error) {
+      console.error('💥 Error processing webhook message:', error);
+      toast.error(`❌ Error processing message: ${error.message}`);
+    }
+  }, [addOrUpdateChat]);
 
   // FastWAPI sync function
   const syncAllData = useCallback(async () => {
@@ -152,105 +249,14 @@ export const useMessages = () => {
     loadInitialData();
   }, [deduplicateChats, syncAllData, syncTemplates]);
 
-  // Enhanced message handling for Pusher events
-  const handleIncomingMessage = useCallback((data) => {
-    console.log('🚨 FastWAPI Message Received:', data);
-    
-    try {
-      let messageText = '';
-      let senderPhone = '';
-      let senderName = '';
-      let timestamp = new Date().toISOString();
-      
-      // Try different data structures that FastWAPI might send
-      if (data.value && data.phone) {
-        // Direct FastWAPI format
-        messageText = data.value;
-        senderPhone = data.phone;
-        senderName = data.contact_name || data.name;
-        timestamp = data.created_at || timestamp;
-      } else if (data.message) {
-        // Alternative format
-        messageText = data.message.value || data.message.text || data.message;
-        senderPhone = data.message.phone || data.phone;
-        senderName = data.message.contact_name || data.contact_name;
-        timestamp = data.message.created_at || data.created_at || timestamp;
-      } else {
-        // Try to extract from any nested structure
-        const extractValue = (obj, key) => {
-          if (!obj || typeof obj !== 'object') return null;
-          if (obj[key]) return obj[key];
-          for (const prop in obj) {
-            if (typeof obj[prop] === 'object') {
-              const result = extractValue(obj[prop], key);
-              if (result) return result;
-            }
-          }
-          return null;
-        };
-
-        messageText = extractValue(data, 'value') || extractValue(data, 'text') || extractValue(data, 'message') || '';
-        senderPhone = extractValue(data, 'phone') || extractValue(data, 'from') || '';
-        senderName = extractValue(data, 'contact_name') || extractValue(data, 'name') || '';
-      }
-      
-      if (messageText && senderPhone) {
-        const formattedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`;
-        
-        const newMsg = {
-          id: Date.now() + Math.random(),
-          from: formattedPhone,
-          to: 'business',
-          text: messageText,
-          timestamp: timestamp,
-          type: 'received',
-          status: 'delivered',
-          contact_name: senderName || formattedPhone
-        };
-        
-        console.log('✅ Processed FastWAPI message:', newMsg);
-        
-        // Add message
-        setMessages(prev => {
-          const updated = [...prev, newMsg];
-          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-          return updated;
-        });
-        
-        // Add/update chat
-        const chatUpdate = {
-          id: formattedPhone,
-          name: senderName || formattedPhone,
-          phone: formattedPhone,
-          lastMessage: messageText,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          unread: 1,
-          avatar: (senderName || formattedPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-          online: true
-        };
-        
-        addOrUpdateChat(chatUpdate);
-        toast.success(`📨 New message from ${senderName || formattedPhone}: ${messageText.substring(0, 50)}...`);
-        
-      } else {
-        console.error('❌ Could not extract message data:', data);
-        toast.error('⚠️ Received data but couldn\'t parse message');
-      }
-      
-    } catch (error) {
-      console.error('💥 Error processing FastWAPI message:', error);
-      toast.error(`❌ Error processing message: ${error.message}`);
-    }
-  }, [addOrUpdateChat]);
-
   // Set up message subscription when connected
   useEffect(() => {
     if (isConnected) {
-      console.log('🔌 Pusher connected - setting up FastWAPI message subscription...');
+      console.log('🔌 Pusher connected - setting up webhook message subscription...');
       subscribeToMessages(handleIncomingMessage);
       
       return () => {
-        console.log('🔌 Cleaning up FastWAPI message subscriptions...');
+        console.log('🔌 Cleaning up webhook message subscriptions...');
         unsubscribeFromMessages();
       };
     } else {
