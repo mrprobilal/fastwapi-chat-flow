@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle, Copy, Globe } from 'lucide-react';
+import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle, Copy, Globe, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { pusherService } from '../services/pusherService';
 import { databaseService } from '../services/databaseService';
@@ -23,11 +23,12 @@ const Settings = () => {
   });
 
   const [syncStatus, setSyncStatus] = useState({
-    webhookUrl: '',
+    webhookUrl: 'https://hook.eu2.make.com/your-webhook-id',
     lastSync: null
   });
 
   const [testingWhatsApp, setTestingWhatsApp] = useState(false);
+  const [testingPusher, setTestingPusher] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -91,6 +92,39 @@ const Settings = () => {
     }
   };
 
+  const testPusherConnection = async () => {
+    setTestingPusher(true);
+    try {
+      // First save the current settings
+      await databaseService.saveSettings(settings);
+      
+      // Connect to Pusher
+      pusherService.connect(settings.pusherKey, settings.pusherCluster);
+      
+      // Wait a moment for connection
+      setTimeout(() => {
+        const isConnected = pusherService.isConnected();
+        if (isConnected) {
+          setConnectionStatus(prev => ({ ...prev, pusher: true }));
+          toast.success('Pusher connected successfully! Ready to receive messages.');
+          
+          // Test the connection
+          pusherService.testConnection();
+        } else {
+          setConnectionStatus(prev => ({ ...prev, pusher: false }));
+          toast.error('Failed to connect to Pusher. Check your credentials.');
+        }
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Pusher test error:', error);
+      setConnectionStatus(prev => ({ ...prev, pusher: false }));
+      toast.error('Failed to connect to Pusher');
+    } finally {
+      setTestingPusher(false);
+    }
+  };
+
   const testWhatsAppConnection = async () => {
     if (!settings.accessToken || !settings.businessId) {
       toast.error('Please enter Access Token and Business ID first');
@@ -116,16 +150,6 @@ const Settings = () => {
     }
   };
 
-  const testPusherConnection = () => {
-    try {
-      pusherService.connect(settings.pusherKey, settings.pusherCluster);
-      toast.success('Pusher connection test initiated!');
-    } catch (error) {
-      console.error('Pusher test error:', error);
-      toast.error('Failed to connect to Pusher');
-    }
-  };
-
   const copyWebhookUrl = () => {
     navigator.clipboard.writeText(syncStatus.webhookUrl);
     toast.success('Webhook URL copied to clipboard!');
@@ -135,10 +159,96 @@ const Settings = () => {
     <div className="p-4 md:p-8">
       <div className="mb-8">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">API Settings</h1>
-        <p className="text-gray-600 mt-2">Configure your WhatsApp Business API and automatic sync</p>
+        <p className="text-gray-600 mt-2">Configure your WhatsApp Business API and real-time messaging</p>
       </div>
 
       <div className="space-y-6">
+        {/* Important Setup Instructions */}
+        <div className="bg-blue-50 rounded-lg shadow-sm border border-blue-200 p-4 md:p-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+            <div>
+              <h3 className="text-lg font-semibold text-blue-900 mb-2">Setup Instructions</h3>
+              <div className="text-sm text-blue-800 space-y-2">
+                <p><strong>Step 1:</strong> Test Pusher connection below ↓</p>
+                <p><strong>Step 2:</strong> In your FastWAPI dashboard, set the webhook URL to trigger Pusher events</p>
+                <p><strong>Step 3:</strong> Configure your FastWAPI to send messages to channel: <code className="bg-blue-100 px-1 rounded">fastwapi-channel</code></p>
+                <p><strong>Step 4:</strong> Use event name: <code className="bg-blue-100 px-1 rounded">message-event</code></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pusher Settings - Moved to top for better visibility */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+            <h3 className="text-lg font-semibold text-gray-900">Pusher Real-time Settings</h3>
+            <button
+              onClick={testPusherConnection}
+              disabled={testingPusher}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
+            >
+              <TestTube className="h-4 w-4" />
+              {testingPusher ? 'Testing...' : 'Test Pusher Connection'}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher App ID</label>
+              <input
+                type="text"
+                name="pusherAppId"
+                value={settings.pusherAppId}
+                onChange={handleInputChange}
+                placeholder="Pusher app ID"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Key</label>
+              <input
+                type="text"
+                name="pusherKey"
+                value={settings.pusherKey}
+                onChange={handleInputChange}
+                placeholder="Pusher app key"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Secret</label>
+              <input
+                type="password"
+                name="pusherSecret"
+                value={settings.pusherSecret}
+                onChange={handleInputChange}
+                placeholder="Pusher app secret"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Cluster</label>
+              <input
+                type="text"
+                name="pusherCluster"
+                value={settings.pusherCluster}
+                onChange={handleInputChange}
+                placeholder="Pusher cluster"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+          
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <h4 className="font-medium text-gray-900 mb-2">Channel Configuration</h4>
+            <div className="text-sm text-gray-600 space-y-1">
+              <p><strong>Channel:</strong> fastwapi-channel</p>
+              <p><strong>Event:</strong> message-event</p>
+              <p><strong>App ID:</strong> {settings.pusherAppId}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Automatic Sync Settings */}
         <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg shadow-sm border border-green-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
@@ -248,70 +358,23 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* Pusher Settings */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-            <h3 className="text-lg font-semibold text-gray-900">Pusher Real-time Settings</h3>
-            <button
-              onClick={testPusherConnection}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
-            >
-              <TestTube className="h-4 w-4" />
-              Test Connection
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher App ID</label>
-              <input
-                type="text"
-                name="pusherAppId"
-                value={settings.pusherAppId}
-                onChange={handleInputChange}
-                placeholder="Pusher app ID"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Key</label>
-              <input
-                type="text"
-                name="pusherKey"
-                value={settings.pusherKey}
-                onChange={handleInputChange}
-                placeholder="Pusher app key"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Secret</label>
-              <input
-                type="password"
-                name="pusherSecret"
-                value={settings.pusherSecret}
-                onChange={handleInputChange}
-                placeholder="Pusher app secret"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pusher Cluster</label>
-              <input
-                type="text"
-                name="pusherCluster"
-                value={settings.pusherCluster}
-                onChange={handleInputChange}
-                placeholder="Pusher cluster"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-        </div>
-
         {/* Connection Status */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Connection Status</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`p-4 rounded-lg border ${connectionStatus.pusher ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+              <div className="flex items-center">
+                {connectionStatus.pusher ? (
+                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                ) : (
+                  <XCircle className="h-5 w-5 text-red-600 mr-2" />
+                )}
+                <span className={`text-sm font-medium ${connectionStatus.pusher ? 'text-green-800' : 'text-red-800'}`}>Pusher Real-time</span>
+              </div>
+              <p className={`text-xs mt-1 ${connectionStatus.pusher ? 'text-green-600' : 'text-red-600'}`}>
+                {connectionStatus.pusher ? 'Connected to fastwapi-channel' : 'Disconnected - Test connection above'}
+              </p>
+            </div>
             <div className={`p-4 rounded-lg border ${connectionStatus.whatsapp ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
               <div className="flex items-center">
                 {connectionStatus.whatsapp ? (
@@ -325,60 +388,42 @@ const Settings = () => {
                 {connectionStatus.whatsapp ? 'Connected and operational' : 'Not connected'}
               </p>
             </div>
-            <div className={`p-4 rounded-lg border ${connectionStatus.pusher ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              <div className="flex items-center">
-                {connectionStatus.pusher ? (
-                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
-                ) : (
-                  <XCircle className="h-5 w-5 text-red-600 mr-2" />
-                )}
-                <span className={`text-sm font-medium ${connectionStatus.pusher ? 'text-green-800' : 'text-red-800'}`}>Pusher Real-time</span>
-              </div>
-              <p className={`text-xs mt-1 ${connectionStatus.pusher ? 'text-green-600' : 'text-red-600'}`}>
-                {connectionStatus.pusher ? 'Connected to fastwapi-channel' : 'Disconnected'}
-              </p>
-            </div>
           </div>
         </div>
-      </div>
 
-      {/* Website Integration Instructions */}
-      <div className="mt-8 bg-blue-50 rounded-lg border border-blue-200 p-4 md:p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-4">Website Integration Instructions</h3>
-        <div className="space-y-3 text-sm text-blue-800">
-          <p><strong>1. Automatic WhatsApp Sync from your website:</strong></p>
-          <pre className="bg-blue-100 p-3 rounded text-xs overflow-x-auto">
-{`// Send WhatsApp settings to this app automatically
-const syncSettings = async (whatsappSettings) => {
-  const response = await fetch('${syncStatus.webhookUrl}', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      accessToken: whatsappSettings.accessToken,
-      businessId: whatsappSettings.businessId,
-      phoneNumberId: whatsappSettings.phoneNumberId
-    })
-  });
-  
-  const result = await response.json();
-  console.log('Sync result:', result);
-};`}
-          </pre>
-          
-          <p><strong>2. Add Pusher real-time communication:</strong></p>
-          <pre className="bg-blue-100 p-3 rounded text-xs overflow-x-auto">
-{`// Install: npm install pusher-js
-const pusher = new Pusher('${settings.pusherKey}', {
-  cluster: '${settings.pusherCluster}'
+        {/* FastWAPI Integration Instructions */}
+        <div className="bg-yellow-50 rounded-lg border border-yellow-200 p-4 md:p-6">
+          <h3 className="text-lg font-semibold text-yellow-900 mb-4">FastWAPI Setup Instructions</h3>
+          <div className="space-y-3 text-sm text-yellow-800">
+            <p><strong>Configure your FastWAPI website to forward WhatsApp messages:</strong></p>
+            
+            <div className="bg-yellow-100 p-3 rounded text-xs">
+              <p className="font-medium mb-2">Add this to your FastWAPI webhook handler:</p>
+              <pre className="overflow-x-auto whitespace-pre-wrap">
+{`// When WhatsApp message is received, send to Pusher
+const Pusher = require('pusher');
+
+const pusher = new Pusher({
+  appId: '${settings.pusherAppId}',
+  key: '${settings.pusherKey}',
+  secret: '${settings.pusherSecret}',
+  cluster: '${settings.pusherCluster}',
+  useTLS: true
 });
 
-const channel = pusher.subscribe('fastwapi-channel');
-channel.bind('message-event', function(data) {
-  console.log('New message from app:', data);
+// In your webhook handler:
+pusher.trigger('fastwapi-channel', 'message-event', {
+  from: message.from,
+  body: message.body,
+  timestamp: message.timestamp
 });`}
-          </pre>
+              </pre>
+            </div>
+            
+            <p className="text-xs text-yellow-700 mt-2">
+              <strong>Important:</strong> Make sure your FastWAPI website can send Pusher messages when WhatsApp webhooks are received.
+            </p>
+          </div>
         </div>
       </div>
     </div>

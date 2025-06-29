@@ -11,18 +11,28 @@ class PusherService {
     }
 
     this.pusher = new Pusher(pusherKey, {
-      cluster: cluster
+      cluster: cluster,
+      encrypted: true
     });
 
     this.channel = this.pusher.subscribe('fastwapi-channel');
     
     // Handle connection events
     this.pusher.connection.bind('connected', () => {
-      console.log('Pusher connected successfully');
+      console.log('Pusher connected successfully to fastwapi-channel');
     });
 
     this.pusher.connection.bind('error', (error: any) => {
       console.error('Pusher connection error:', error);
+    });
+
+    // Log subscription events
+    this.channel.bind('pusher:subscription_succeeded', () => {
+      console.log('Successfully subscribed to fastwapi-channel');
+    });
+
+    this.channel.bind('pusher:subscription_error', (error: any) => {
+      console.error('Subscription error:', error);
     });
 
     return this.channel;
@@ -38,22 +48,32 @@ class PusherService {
 
   subscribeToMessages(callback: (data: any) => void) {
     if (this.channel) {
-      // Listen to multiple event types for better compatibility
-      this.channel.bind('message-event', callback);
-      this.channel.bind('new-message', callback);
-      this.channel.bind('incoming-message', callback);
-      this.channel.bind('whatsapp-message', callback);
+      // Listen to the main event that FastWAPI should send
+      this.channel.bind('message-event', (data: any) => {
+        console.log('Received message-event:', data);
+        callback(data);
+      });
       
-      console.log('Subscribed to message events');
+      // Also listen to common WhatsApp webhook events
+      this.channel.bind('whatsapp-message', (data: any) => {
+        console.log('Received whatsapp-message:', data);
+        callback(data);
+      });
+      
+      this.channel.bind('incoming-message', (data: any) => {
+        console.log('Received incoming-message:', data);
+        callback(data);
+      });
+      
+      console.log('Subscribed to message events on fastwapi-channel');
     }
   }
 
   unsubscribeFromMessages() {
     if (this.channel) {
       this.channel.unbind('message-event');
-      this.channel.unbind('new-message');
-      this.channel.unbind('incoming-message');
       this.channel.unbind('whatsapp-message');
+      this.channel.unbind('incoming-message');
       
       console.log('Unsubscribed from message events');
     }
@@ -61,6 +81,14 @@ class PusherService {
 
   isConnected() {
     return this.pusher?.connection.state === 'connected';
+  }
+
+  // Test method to send a test event (for debugging)
+  testConnection() {
+    if (this.channel) {
+      console.log('Channel state:', this.channel);
+      console.log('Pusher connection state:', this.pusher?.connection.state);
+    }
   }
 }
 
