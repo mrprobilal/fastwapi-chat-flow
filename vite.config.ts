@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     // Optimize for mobile devices
     target: 'es2015',
-    minify: 'terser',
+    minify: 'esbuild', // Use esbuild instead of terser (no additional dependency needed)
     sourcemap: false,
     rollupOptions: {
       output: {
