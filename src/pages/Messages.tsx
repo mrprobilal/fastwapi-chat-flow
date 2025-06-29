@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Search, Send, FileText, Paperclip, Smile, ArrowLeft } from 'lucide-react';
-import { useMessages } from '../hooks/useMessages';
+import { usePusher } from '../hooks/usePusher';
 import { toast } from 'sonner';
 import { useLocation } from 'react-router-dom';
 import { useIsMobile } from '../hooks/use-mobile';
-import { whatsappService } from '../services/whatsappService';
-import TestMessage from '../components/TestMessage';
 
 const Messages = () => {
   const location = useLocation();
@@ -13,37 +11,44 @@ const Messages = () => {
   const [selectedChat, setSelectedChat] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [apiStatus, setApiStatus] = useState({ connected: false, checking: true });
 
-  // Use the useMessages hook
-  const { 
-    messages, 
-    chats, 
-    templates, 
-    apiStatus, 
-    setMessages, 
-    setChats, 
-    setTemplates,
-    addOrUpdateChat, 
-    normalizePhoneNumber,
-    syncTemplates
-  } = useMessages();
+  const { isConnected, subscribeToMessages, unsubscribeFromMessages } = usePusher();
 
-  // Debug: Log messages and chats when they change
-  useEffect(() => {
-    console.log('📊 Messages updated:', messages.length, 'messages');
-    console.log('📊 Chats updated:', chats.length, 'chats');
-    console.log('📊 Templates updated:', templates.length, 'templates');
-    console.log('📊 Current messages:', messages);
-    console.log('📊 Current chats:', chats);
-  }, [messages, chats, templates]);
+  const [chats, setChats] = useState([]);
+
+  // Helper function to normalize phone numbers
+  const normalizePhoneNumber = (phone) => {
+    if (!phone) return '';
+    // Remove all non-digit characters and ensure it starts with +
+    const digits = phone.replace(/\D/g, '');
+    return digits.startsWith('1') ? `+${digits}` : `+${digits}`;
+  };
+
+  // Helper function to deduplicate chats by phone number
+  const deduplicateChats = (chatList) => {
+    const seen = new Set();
+    return chatList.filter(chat => {
+      const normalizedPhone = normalizePhoneNumber(chat.phone);
+      if (seen.has(normalizedPhone)) {
+        return false;
+      }
+      seen.add(normalizedPhone);
+      return true;
+    });
+  };
 
   // Helper function to find existing chat by phone number
   const findExistingChat = (phone) => {
     const normalizedPhone = normalizePhoneNumber(phone);
     
+    // Check current state first
     const stateChat = chats.find(chat => normalizePhoneNumber(chat.phone) === normalizedPhone);
     if (stateChat) return stateChat;
 
+    // Check localStorage as fallback
     const savedChats = localStorage.getItem('whatsapp-chats');
     if (savedChats) {
       const parsedChats = JSON.parse(savedChats);
@@ -53,19 +58,150 @@ const Messages = () => {
     return null;
   };
 
+  // Helper function to safely add or update chat
+  const addOrUpdateChat = (newChat) => {
+    setChats(prev => {
+      const normalizedPhone = normalizePhoneNumber(newChat.phone);
+      const existingIndex = prev.findIndex(chat => normalizePhoneNumber(chat.phone) === normalizedPhone);
+      
+      let updated;
+      if (existingIndex >= 0) {
+        // Update existing chat
+        updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], ...newChat };
+      } else {
+        // Add new chat
+        updated = [newChat, ...prev];
+      }
+      
+      // Deduplicate and save to localStorage
+      const deduplicated = deduplicateChats(updated);
+      localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicated));
+      return deduplicated;
+    });
+  };
+
+  // Check WhatsApp API status automatically
+  useEffect(() => {
+    const checkApiStatus = async () => {
+      try {
+        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+        if (!settings.accessToken || !settings.phoneNumberId) {
+          setApiStatus({ connected: false, checking: false });
+          return;
+        }
+
+        const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${settings.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        setApiStatus({ connected: response.ok, checking: false });
+      } catch (error) {
+        console.error('API status check failed:', error);
+        setApiStatus({ connected: false, checking: false });
+      }
+    };
+
+    checkApiStatus();
+  }, []);
+
+  // Load and persist templates from API
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        // First load from localStorage
+        const savedTemplates = localStorage.getItem('whatsapp-templates');
+        if (savedTemplates) {
+          setTemplates(JSON.parse(savedTemplates));
+        }
+
+        // Then try to fetch fresh templates
+        const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+        if (!settings.accessToken || !settings.businessId) {
+          return;
+        }
+
+        const response = await fetch(`https://graph.facebook.com/v18.0/${settings.businessId}/message_templates`, {
+          headers: {
+            'Authorization': `Bearer ${settings.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Templates loaded:', data);
+          
+          if (data.data) {
+            const formattedTemplates = data.data.map((template) => ({
+              id: template.id,
+              name: template.name,
+              content: template.components?.find(c => c.type === 'BODY')?.text || 'Template content'
+            }));
+            setTemplates(formattedTemplates);
+            // Persist templates in localStorage
+            localStorage.setItem('whatsapp-templates', JSON.stringify(formattedTemplates));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading templates:', error);
+      }
+    };
+
+    loadTemplates();
+  }, []);
+
+  // Load messages and chats from localStorage only
+  useEffect(() => {
+    const loadStoredData = () => {
+      try {
+        // Load messages from localStorage
+        const savedMessages = localStorage.getItem('whatsapp-messages');
+        const savedChats = localStorage.getItem('whatsapp-chats');
+        
+        if (savedMessages) {
+          const parsedMessages = JSON.parse(savedMessages);
+          console.log('Loaded messages from localStorage:', parsedMessages);
+          setMessages(parsedMessages);
+        }
+        
+        if (savedChats) {
+          const parsedChats = JSON.parse(savedChats);
+          console.log('Loaded chats from localStorage:', parsedChats);
+          // Deduplicate chats when loading
+          const deduplicatedChats = deduplicateChats(parsedChats);
+          setChats(deduplicatedChats);
+          // Update localStorage if deduplication changed anything
+          if (deduplicatedChats.length !== parsedChats.length) {
+            localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicatedChats));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading stored data:', error);
+      }
+    };
+
+    loadStoredData();
+  }, []);
+
   // Handle selected customer from navigation
   useEffect(() => {
     if (location.state?.selectedCustomer) {
       const customer = location.state.selectedCustomer;
-      console.log('👤 Processing selected customer:', customer);
+      console.log('Processing selected customer:', customer);
       
+      // Check if chat already exists using the helper function
       const existingChat = findExistingChat(customer.phone);
       
       if (existingChat) {
-        console.log('💬 Found existing chat:', existingChat);
+        console.log('Found existing chat:', existingChat);
         setSelectedChat(existingChat.id);
       } else {
-        console.log('✨ Creating new chat for customer:', customer);
+        console.log('Creating new chat for customer:', customer);
         const newChat = {
           id: customer.phone,
           name: customer.name,
@@ -77,13 +213,85 @@ const Messages = () => {
           online: false
         };
         
+        // Use the helper function to safely add the chat
         addOrUpdateChat(newChat);
         setSelectedChat(newChat.id);
       }
     }
   }, [location.state]);
 
-  // Enhanced message sending with WhatsApp API
+  // Enhanced message receiving with better debugging
+  useEffect(() => {
+    const handleIncomingMessage = (data) => {
+      console.log('📨 Raw Pusher event received:', data);
+      console.log('📨 Event type:', typeof data, 'Keys:', Object.keys(data || {}));
+      
+      // Handle different data structures from webhook
+      const messageText = data.message || data.text || data.body || data.content;
+      const senderPhone = data.from || data.phone || data.sender;
+      const senderName = data.contact_name || data.name || data.contact;
+      
+      console.log('📨 Extracted data:', { messageText, senderPhone, senderName });
+      
+      if (!messageText || !senderPhone) {
+        console.warn('❌ Invalid message data received:', data);
+        toast.error('Received invalid message data');
+        return;
+      }
+      
+      const newMsg = {
+        id: Date.now() + Math.random(),
+        from: senderPhone,
+        to: 'business',
+        text: messageText,
+        timestamp: new Date().toISOString(),
+        type: 'received',
+        status: 'delivered',
+        contact_name: senderName
+      };
+      
+      console.log('✅ Processing incoming message:', newMsg);
+      
+      setMessages(prev => {
+        const updated = [...prev, newMsg];
+        localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
+        console.log('💾 Messages saved to localStorage, total:', updated.length);
+        return updated;
+      });
+      
+      // Add/update chat using helper function
+      if (senderPhone && senderPhone !== 'business') {
+        const chatUpdate = {
+          id: senderPhone,
+          name: senderName || senderPhone,
+          phone: senderPhone,
+          lastMessage: messageText,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          unread: selectedChat === senderPhone ? 0 : 1,
+          avatar: (senderName || senderPhone).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+          online: true
+        };
+        
+        addOrUpdateChat(chatUpdate);
+        console.log('💬 Chat updated:', chatUpdate);
+      }
+      
+      toast.success(`📨 New message from ${senderName || senderPhone}!`);
+    };
+
+    if (isConnected) {
+      console.log('🔌 Pusher connected, subscribing to messages...');
+      subscribeToMessages(handleIncomingMessage);
+    } else {
+      console.log('❌ Pusher not connected, cannot subscribe to messages');
+    }
+
+    return () => {
+      console.log('🔌 Unsubscribing from messages...');
+      unsubscribeFromMessages();
+    };
+  }, [isConnected, subscribeToMessages, unsubscribeFromMessages, selectedChat]);
+
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;
 
@@ -97,23 +305,29 @@ const Messages = () => {
       status: 'sending'
     };
 
-    console.log('📤 Sending message:', messageData);
-
     setMessages(prev => {
       const updated = [...prev, messageData];
       localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
       return updated;
     });
-
-    const messageText = newMessage;
     setNewMessage('');
 
     try {
-      // Send via FastWAPI if connected
-      if (apiStatus.connected) {
-        await whatsappService.sendMessage(selectedChat, messageText);
-        
-        // Update message status to sent
+      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${settings.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: selectedChat.replace('+', ''),
+          text: { body: newMessage }
+        })
+      });
+
+      if (response.ok) {
         setMessages(prev => {
           const updated = prev.map(msg => 
             msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
@@ -121,24 +335,12 @@ const Messages = () => {
           localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
           return updated;
         });
-        
-        toast.success('Message sent via FastWAPI!');
+        toast.success('Message sent successfully!');
       } else {
-        // Update message status to sent (local only)
-        setMessages(prev => {
-          const updated = prev.map(msg => 
-            msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
-          );
-          localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
-          return updated;
-        });
-        
-        toast.success('Message saved locally (FastWAPI not connected)');
+        throw new Error('Failed to send message');
       }
     } catch (error) {
-      console.error('Failed to send message:', error);
-      
-      // Update message status to failed
+      console.error('Error sending message:', error);
       setMessages(prev => {
         const updated = prev.map(msg => 
           msg.id === messageData.id ? { ...msg, status: 'failed' } : msg
@@ -146,20 +348,8 @@ const Messages = () => {
         localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
         return updated;
       });
-      
-      toast.error(`Failed to send message: ${error.message}`);
+      toast.error('Failed to send message');
     }
-
-    // Update chat with last message
-    setChats(prev => {
-      const updated = prev.map(chat => 
-        chat.id === selectedChat 
-          ? { ...chat, lastMessage: messageText, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
-          : chat
-      );
-      localStorage.setItem('whatsapp-chats', JSON.stringify(updated));
-      return updated;
-    });
   };
 
   const sendTemplate = async (template) => {
@@ -175,20 +365,33 @@ const Messages = () => {
       status: 'sending'
     };
 
-    console.log('📤 Sending template:', template.name);
-
     setMessages(prev => {
       const updated = [...prev, messageData];
       localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
       return updated;
     });
+    setShowTemplates(false);
 
     try {
-      // Send via FastWAPI if connected
-      if (apiStatus.connected) {
-        await whatsappService.sendTemplateMessage(template.name, selectedChat);
-        
-        // Update message status to sent
+      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+      const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${settings.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: selectedChat.replace('+', ''),
+          type: 'template',
+          template: {
+            name: template.name,
+            language: { code: 'en_US' }
+          }
+        })
+      });
+
+      if (response.ok) {
         setMessages(prev => {
           const updated = prev.map(msg => 
             msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
@@ -196,24 +399,19 @@ const Messages = () => {
           localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
           return updated;
         });
-        
-        toast.success(`Template "${template.name}" sent via FastWAPI!`);
+        toast.success('Template sent successfully!');
       } else {
-        // Update message status to sent (local only)
         setMessages(prev => {
           const updated = prev.map(msg => 
-            msg.id === messageData.id ? { ...msg, status: 'sent' } : msg
+            msg.id === messageData.id ? { ...msg, status: 'failed' } : msg
           );
           localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
           return updated;
         });
-        
-        toast.success('Template saved locally (FastWAPI not connected)');
+        toast.error('Failed to send template');
       }
     } catch (error) {
-      console.error('Failed to send template:', error);
-      
-      // Update message status to failed
+      console.error('Error sending template:', error);
       setMessages(prev => {
         const updated = prev.map(msg => 
           msg.id === messageData.id ? { ...msg, status: 'failed' } : msg
@@ -221,65 +419,16 @@ const Messages = () => {
         localStorage.setItem('whatsapp-messages', JSON.stringify(updated));
         return updated;
       });
-      
-      toast.error(`Failed to send template: ${error.message}`);
+      toast.error('Failed to send template');
     }
-
-    setShowTemplates(false);
   };
 
   const getSelectedChat = () => chats.find(chat => chat.id === selectedChat);
   const selectedChatData = getSelectedChat();
-  
-  // Fix: Get messages for selected chat properly
-  const chatMessages = messages.filter(msg => {
-    if (!selectedChat) return false;
-    
-    // Check if message is from the selected chat (incoming) or to the selected chat (outgoing)
-    const isFromSelectedChat = (msg.from === selectedChat && msg.type === 'received');
-    const isToSelectedChat = (msg.to === selectedChat && msg.type === 'sent');
-    
-    console.log('🔍 Filtering message:', {
-      messageId: msg.id,
-      messageFrom: msg.from,
-      messageTo: msg.to,
-      messageType: msg.type,
-      selectedChat,
-      isFromSelectedChat,
-      isToSelectedChat,
-      willShow: isFromSelectedChat || isToSelectedChat
-    });
-    
-    return isFromSelectedChat || isToSelectedChat;
-  });
-
-  // Debug: Log filtered messages
-  useEffect(() => {
-    console.log('💬 Chat messages for selected chat:', selectedChat, chatMessages);
-  }, [selectedChat, chatMessages]);
-
-  // Add test message handler
-  const handleTestMessage = (data: any) => {
-    console.log('🧪 Processing test message:', data);
-    // Trigger the message handler directly
-    if (typeof window !== 'undefined') {
-      const event = new CustomEvent('test-pusher-message', { detail: data });
-      window.dispatchEvent(event);
-    }
-  };
-
-  // Load templates on demand
-  const handleShowTemplates = async () => {
-    if (templates.length === 0) {
-      try {
-        await syncTemplates();
-      } catch (error) {
-        console.error('Failed to sync templates:', error);
-        toast.error('Failed to load templates');
-      }
-    }
-    setShowTemplates(!showTemplates);
-  };
+  const chatMessages = messages.filter(msg => 
+    (msg.from === selectedChat && msg.type === 'received') || 
+    (msg.to === selectedChat && msg.type === 'sent')
+  );
 
   // Mobile view - show only chat list or selected chat
   if (isMobile) {
@@ -370,7 +519,7 @@ const Messages = () => {
           <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
             {showTemplates && templates.length > 0 && (
               <div className="mb-4 p-3 bg-gray-50 rounded-lg border max-h-40 overflow-y-auto">
-                <h4 className="text-sm font-medium text-gray-900 mb-2">Templates ({templates.length})</h4>
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Templates</h4>
                 <div className="space-y-2">
                   {templates.map((template) => (
                     <button
@@ -387,8 +536,9 @@ const Messages = () => {
             )}
             <div className="flex items-center space-x-2">
               <button
-                onClick={handleShowTemplates}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-gray-700"
+                onClick={() => setShowTemplates(!showTemplates)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                disabled={templates.length === 0}
               >
                 <FileText className="h-5 w-5" />
               </button>
@@ -428,9 +578,18 @@ const Messages = () => {
               <h1 className="text-xl font-bold text-gray-900">Messages</h1>
               <div className="flex items-center space-x-4 mt-1">
                 <div className="flex items-center space-x-2">
-                  <div className={`h-2 w-2 rounded-full ${apiStatus.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                   <span className="text-xs text-gray-600">
-                    Status: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Connected' : 'Disconnected'}
+                    Pusher: {isConnected ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className={`h-2 w-2 rounded-full ${
+                    apiStatus.checking ? 'bg-yellow-500' : 
+                    apiStatus.connected ? 'bg-green-500' : 'bg-red-500'
+                  }`}></div>
+                  <span className="text-xs text-gray-600">
+                    WhatsApp: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Connected' : 'Disconnected'}
                   </span>
                 </div>
               </div>
@@ -456,7 +615,9 @@ const Messages = () => {
             <div className="p-4 text-center text-gray-500">
               <MessageSquare className="h-12 w-12 mx-auto mb-2 text-gray-300" />
               <p>No conversations yet</p>
-              <p className="text-xs">Ready to receive messages</p>
+              <p className="text-xs">
+                {isConnected ? 'Ready to receive messages' : 'Waiting for Pusher connection...'}
+              </p>
             </div>
           ) : (
             chats.map((chat) => (
@@ -497,7 +658,7 @@ const Messages = () => {
     );
   }
 
-  // Desktop view
+  // Desktop view - keep existing layout
   return (
     <div className="h-screen bg-gray-100 flex flex-col">
       {/* Header */}
@@ -505,17 +666,22 @@ const Messages = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-gray-900">Messages</h1>
-            <p className="text-sm text-gray-600 hidden md:block">Real-time messaging via Pusher & FastWAPI</p>
+            <p className="text-sm text-gray-600 hidden md:block">Real-time messaging with your customers</p>
           </div>
           <div className="flex items-center space-x-4">
-            <TestMessage onTestMessage={handleTestMessage} />
+            <div className="flex items-center space-x-2">
+              <div className={`h-3 w-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className="text-sm text-gray-600 hidden md:inline">
+                Pusher: {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
             <div className="flex items-center space-x-2">
               <div className={`h-3 w-3 rounded-full ${
                 apiStatus.checking ? 'bg-yellow-500' : 
                 apiStatus.connected ? 'bg-green-500' : 'bg-red-500'
               }`}></div>
               <span className="text-sm text-gray-600 hidden md:inline">
-                Status: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Ready' : 'Setup needed'}
+                WhatsApp: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Connected' : 'Disconnected'}
               </span>
             </div>
           </div>
@@ -540,7 +706,9 @@ const Messages = () => {
               <div className="p-4 text-center text-gray-500">
                 <MessageSquare className="h-12 w-12 mx-auto mb-2 text-gray-300" />
                 <p>No conversations yet</p>
-                <p className="text-xs">Ready to receive messages</p>
+                <p className="text-xs">
+                  {isConnected ? 'Ready to receive messages' : 'Waiting for Pusher connection...'}
+                </p>
               </div>
             ) : (
               chats.map((chat) => (
@@ -660,9 +828,9 @@ const Messages = () => {
               {/* Message Input */}
               <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
                 {showTemplates && templates.length > 0 && (
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border max-h-40 overflow-y-auto">
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">Templates ({templates.length})</h4>
-                    <div className="space-y-2">
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Message Templates</h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
                       {templates.map((template) => (
                         <button
                           key={template.id}
@@ -678,8 +846,9 @@ const Messages = () => {
                 )}
                 <div className="flex items-center space-x-2">
                   <button
-                    onClick={handleShowTemplates}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-gray-700"
+                    onClick={() => setShowTemplates(!showTemplates)}
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                    disabled={templates.length === 0}
                   >
                     <FileText className="h-5 w-5" />
                   </button>
@@ -713,16 +882,22 @@ const Messages = () => {
             <div className="flex-1 flex items-center justify-center text-center">
               <div>
                 <MessageSquare className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-gray-900 mb-2">Ready for Real-time Messages</h3>
-                <p className="text-gray-600">Select a chat to start messaging</p>
+                <h3 className="text-xl font-medium text-gray-900 mb-2">Welcome to WhatsApp Business</h3>
+                <p className="text-gray-600">Select a chat to start messaging your customers</p>
                 <div className="mt-4 flex items-center justify-center space-x-4 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className="text-gray-600">
+                      Pusher: {isConnected ? 'Ready' : 'Connecting...'}
+                    </span>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <div className={`h-2 w-2 rounded-full ${
                       apiStatus.checking ? 'bg-yellow-500' : 
                       apiStatus.connected ? 'bg-green-500' : 'bg-red-500'
                     }`}></div>
                     <span className="text-gray-600">
-                      Status: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Ready' : 'Configure in Settings'}
+                      WhatsApp: {apiStatus.checking ? 'Checking...' : apiStatus.connected ? 'Ready' : 'Setup needed'}
                     </span>
                   </div>
                 </div>

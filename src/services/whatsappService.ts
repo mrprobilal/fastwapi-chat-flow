@@ -1,106 +1,119 @@
 
-import { toast } from 'sonner';
 import { databaseService } from './databaseService';
-import { fastwAPIService } from './fastwAPIService';
+import { toast } from 'sonner';
 
 class WhatsAppService {
+  private baseUrl = 'https://graph.facebook.com/v18.0';
+
   async testConnection() {
-    console.log('🔍 Testing FastWAPI connection...');
+    const settings = databaseService.getSettings();
     
-    try {
-      await fastwAPIService.testConnection();
-      console.log('✅ FastWAPI connection successful');
-      return true;
-    } catch (error: any) {
-      console.error('❌ FastWAPI connection failed:', error);
-      throw new Error(`FastWAPI connection failed: ${error.message}`);
+    if (!settings?.accessToken || !settings?.businessId) {
+      throw new Error('WhatsApp API settings not configured');
     }
-  }
-
-  async syncContacts() {
-    console.log('👥 Syncing contacts via FastWAPI...');
-    
-    try {
-      const conversations = await fastwAPIService.getConversations();
-      
-      // Save contacts to localStorage
-      localStorage.setItem('whatsapp-contacts', JSON.stringify(conversations));
-      console.log(`✅ Synced ${conversations.length} contacts via FastWAPI`);
-
-      return conversations;
-    } catch (error: any) {
-      console.error('❌ FastWAPI contact sync error:', error);
-      throw new Error(`Failed to sync contacts via FastWAPI: ${error.message}`);
-    }
-  }
-
-  async getMessageHistory(phoneNumber: string, limit = 50) {
-    console.log('📜 Getting message history via FastWAPI for:', phoneNumber);
 
     try {
-      const messages = await fastwAPIService.getChatMessages(phoneNumber);
-      console.log(`✅ Retrieved ${messages.length} messages via FastWAPI for ${phoneNumber}`);
-      return messages;
-    } catch (error: any) {
-      console.error('❌ FastWAPI message history fetch error:', error);
-      throw new Error(`Failed to fetch message history via FastWAPI: ${error.message}`);
-    }
-  }
+      const response = await fetch(`${this.baseUrl}/${settings.businessId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${settings.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-  async syncAllMessageHistory() {
-    console.log('🔄 Starting full message history sync via FastWAPI...');
-    
-    try {
-      const result = await fastwAPIService.syncAllData();
-      console.log('✅ FastWAPI sync completed:', result);
-      return result;
-    } catch (error: any) {
-      console.error('❌ FastWAPI full sync error:', error);
-      throw new Error(`Failed to sync message history via FastWAPI: ${error.message}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('WhatsApp connection successful:', data);
+      return data;
+    } catch (error) {
+      console.error('WhatsApp connection test failed:', error);
+      throw error;
     }
   }
 
   async syncTemplates() {
-    console.log('🔄 Syncing templates from FastWAPI...');
-
-    try {
-      const templates = await fastwAPIService.getTemplates();
-      
-      // Save templates to localStorage
-      localStorage.setItem('whatsapp-templates', JSON.stringify(templates));
-      databaseService.setLastSyncTime(new Date());
-
-      console.log(`✅ Synced ${templates.length} templates from FastWAPI`);
-      return templates;
-    } catch (error: any) {
-      console.error('❌ Template sync error:', error);
-      throw new Error(`Failed to sync templates: ${error.message}`);
+    const settings = databaseService.getSettings();
+    
+    if (!settings?.accessToken || !settings?.businessId) {
+      throw new Error('WhatsApp API settings not configured');
     }
-  }
-
-  async sendTemplateMessage(templateName: string, phoneNumber: string, variables: Record<string, string> = {}) {
-    console.log('📤 Sending template message via FastWAPI:', { templateName, phoneNumber, variables });
 
     try {
-      const result = await fastwAPIService.sendTemplate(phoneNumber, templateName, variables);
-      console.log('✅ Template message sent via FastWAPI:', result);
-      return result;
-    } catch (error: any) {
-      console.error('❌ FastWAPI template send error:', error);
-      throw new Error(`Failed to send template via FastWAPI: ${error.message}`);
+      const response = await fetch(`${this.baseUrl}/${settings.businessId}/message_templates`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${settings.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Templates synced:', data);
+      
+      if (data.data && data.data.length > 0) {
+        const syncedTemplates = data.data.map((template: any) => ({
+          id: template.id,
+          name: template.name,
+          category: template.category || 'Utility',
+          status: template.status || 'Approved',
+          content: template.components?.find((c: any) => c.type === 'BODY')?.text || 'Template content',
+          variables: template.components?.find((c: any) => c.type === 'BODY')?.example?.body_text?.[0] || []
+        }));
+        
+        // Save templates to localStorage
+        localStorage.setItem('whatsapp-templates', JSON.stringify(syncedTemplates));
+        return syncedTemplates;
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Template sync failed:', error);
+      throw error;
     }
   }
 
   async sendMessage(phoneNumber: string, message: string) {
-    console.log('📤 Sending message via FastWAPI:', { phoneNumber, message });
+    const settings = databaseService.getSettings();
+    
+    if (!settings?.accessToken || !settings?.phoneNumberId) {
+      throw new Error('WhatsApp API settings not configured');
+    }
 
     try {
-      const result = await fastwAPIService.sendMessage(phoneNumber, message);
-      console.log('✅ Message sent via FastWAPI:', result);
-      return result;
-    } catch (error: any) {
-      console.error('❌ FastWAPI message send error:', error);
-      throw new Error(`Failed to send message via FastWAPI: ${error.message}`);
+      const response = await fetch(`${this.baseUrl}/${settings.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${settings.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: phoneNumber,
+          type: 'text',
+          text: { body: message }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Message sent successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      throw error;
     }
   }
 }

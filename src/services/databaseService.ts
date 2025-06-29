@@ -1,114 +1,66 @@
-export interface BusinessSettings {
-  pusherKey: string;
-  pusherSecret: string;
-  pusherAppId: string;
-  pusherCluster: string;
-  accessToken: string;
-  businessId: string;
-  phoneNumberId: string;
-  webhookVerifyToken: string;
-  backendUrl: string;
-  backendToken: string;
-}
 
+import { toast } from 'sonner';
+
+// Database service for settings and data management
 class DatabaseService {
-  private storageKey = 'whatsapp-business-settings';
+  private settings: any = null;
+  private settingsCallbacks: Array<(settings: any) => void> = [];
 
-  initializeSettings(): void {
-    // Initialize settings with defaults if not present
-    const settings = this.getSettings();
-    this.saveSettings(settings);
+  async initializeSettings() {
+    try {
+      // Load from localStorage as fallback
+      const localSettings = localStorage.getItem('fastwapi-settings');
+      if (localSettings) {
+        this.settings = JSON.parse(localSettings);
+        this.notifySettingsChange();
+      }
+    } catch (error) {
+      console.error('Failed to initialize settings:', error);
+    }
   }
 
-  onSettingsChange(callback: (settings: BusinessSettings) => void): () => void {
-    // Simple implementation - in a real app you'd use proper event listeners
-    const checkForChanges = () => {
-      const settings = this.getSettings();
-      callback(settings);
-    };
-    
-    // Check for changes every second (simple polling)
-    const interval = setInterval(checkForChanges, 1000);
+  async saveSettings(newSettings: any) {
+    try {
+      // Save to localStorage (will be replaced with Supabase later)
+      localStorage.setItem('fastwapi-settings', JSON.stringify(newSettings));
+      this.settings = newSettings;
+      this.notifySettingsChange();
+      
+      console.log('Settings saved:', newSettings);
+      return true;
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      throw error;
+    }
+  }
+
+  getSettings() {
+    return this.settings;
+  }
+
+  onSettingsChange(callback: (settings: any) => void) {
+    this.settingsCallbacks.push(callback);
     
     // Return cleanup function
-    return () => clearInterval(interval);
+    return () => {
+      this.settingsCallbacks = this.settingsCallbacks.filter(cb => cb !== callback);
+    };
   }
 
-  getSettings(): BusinessSettings {
-    try {
-      const stored = localStorage.getItem(this.storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return {
-          // Set default Pusher values
-          pusherKey: parsed.pusherKey || '490510485d3b7c3874d4',
-          pusherSecret: parsed.pusherSecret || 'bdafa26e3b3d42f53d5c',
-          pusherAppId: parsed.pusherAppId || '2012752',
-          pusherCluster: parsed.pusherCluster || 'ap4',
-          // Keep existing WhatsApp API settings
-          accessToken: parsed.accessToken || '',
-          businessId: parsed.businessId || '',
-          phoneNumberId: parsed.phoneNumberId || '',
-          webhookVerifyToken: parsed.webhookVerifyToken || '',
-          // Keep existing backend settings
-          backendUrl: parsed.backendUrl || 'https://fastwapi.com',
-          backendToken: parsed.backendToken || ''
-        };
-      }
-      // Return default settings with Pusher configuration
-      return {
-        pusherKey: '490510485d3b7c3874d4',
-        pusherSecret: 'bdafa26e3b3d42f53d5c',
-        pusherAppId: '2012752',
-        pusherCluster: 'ap4',
-        accessToken: '',
-        businessId: '',
-        phoneNumberId: '',
-        webhookVerifyToken: '',
-        backendUrl: 'https://fastwapi.com',
-        backendToken: ''
-      };
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      return {
-        pusherKey: '490510485d3b7c3874d4',
-        pusherSecret: 'bdafa26e3b3d42f53d5c',
-        pusherAppId: '2012752',
-        pusherCluster: 'ap4',
-        accessToken: '',
-        businessId: '',
-        phoneNumberId: '',
-        webhookVerifyToken: '',
-        backendUrl: 'https://fastwapi.com',
-        backendToken: ''
-      };
-    }
+  private notifySettingsChange() {
+    this.settingsCallbacks.forEach(callback => {
+      callback(this.settings);
+    });
   }
 
-  saveSettings(settings: BusinessSettings): void {
-    try {
-      localStorage.setItem(this.storageKey, JSON.stringify(settings));
-    } catch (error) {
-      console.error('Error saving settings:', error);
-    }
+  // Get last sync time
+  getLastSyncTime() {
+    return this.settings?.lastSyncTime || null;
   }
 
-  getLastSyncTime(): Date | null {
-    try {
-      const stored = localStorage.getItem('last-sync-time');
-      return stored ? new Date(stored) : null;
-    } catch (error) {
-      console.error('Error loading last sync time:', error);
-      return null;
-    }
-  }
-
-  setLastSyncTime(date: Date): void {
-    try {
-      localStorage.setItem('last-sync-time', date.toISOString());
-    } catch (error) {
-      console.error('Error saving last sync time:', error);
-    }
+  // Check if settings are synced from fastwapi.com
+  isSynced() {
+    return !!(this.settings?.lastSyncTime);
   }
 }
 
