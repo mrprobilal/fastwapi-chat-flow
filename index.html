@@ -3,10 +3,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>FastWAPI - WhatsApp Business API Platform</title>
     <meta name="description" content="Professional WhatsApp Business API management platform with real-time messaging, customer management, and analytics" />
     <meta name="author" content="FastWAPI" />
+
+    <!-- Mobile App Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="FastWAPI" />
+    <meta name="theme-color" content="#10b981" />
+
+    <!-- PWA Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
 
     <meta property="og:title" content="FastWAPI - WhatsApp Business API Platform" />
     <meta property="og:description" content="Professional WhatsApp Business API management platform with real-time messaging, customer management, and analytics" />
@@ -16,6 +28,25 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@lovable_dev" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+    <!-- Capacitor CSS for mobile compatibility -->
+    <style>
+      body {
+        overscroll-behavior: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      
+      /* Safe area handling for notched devices */
+      .safe-area-top {
+        padding-top: env(safe-area-inset-top);
+      }
+      
+      .safe-area-bottom {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+    </style>
   </head>
 
   <body>
