@@ -8,7 +8,7 @@ import { Input } from '../components/ui/input';
 
 const Settings = () => {
   const [settings, setSettings] = useState({
-    backendUrl: '',
+    backendUrl: 'https://fastwapi.com',
     backendToken: '',
   });
 
@@ -28,7 +28,7 @@ const Settings = () => {
         if (initialSettings) {
           console.log('🔧 Loading initial settings');
           setSettings({
-            backendUrl: initialSettings.backendUrl || '',
+            backendUrl: initialSettings.backendUrl || 'https://fastwapi.com',
             backendToken: initialSettings.backendToken || '',
           });
           
@@ -116,20 +116,26 @@ const Settings = () => {
   return (
     <div className="p-4 md:p-8">
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-600 mt-2">Configure your FastWAPI backend connection</p>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">API Configuration</h1>
+        <p className="text-gray-600 mt-2">Configure your FastWAPI backend connection for WhatsApp messaging</p>
       </div>
 
       <div className="space-y-6">
         {/* FastWAPI Backend Settings */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-            <h3 className="text-lg font-semibold text-gray-900">FastWAPI Backend</h3>
+            <h3 className="text-lg font-semibold text-gray-900">FastWAPI Configuration</h3>
             <div className="text-sm text-gray-500">
               Status: {connectionStatus.fastwapi ? (
-                <span className="text-green-600 font-medium">Connected</span>
+                <span className="text-green-600 font-medium flex items-center gap-1">
+                  <CheckCircle className="h-4 w-4" />
+                  Connected
+                </span>
               ) : (
-                <span className="text-red-600 font-medium">Not Connected</span>
+                <span className="text-red-600 font-medium flex items-center gap-1">
+                  <XCircle className="h-4 w-4" />
+                  Not Connected
+                </span>
               )}
             </div>
           </div>
@@ -156,10 +162,13 @@ const Settings = () => {
                   </button>
                 )}
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Default: https://fastwapi.com
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Backend Token <span className="text-red-500">*</span>
+                API Token <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <Input
@@ -181,7 +190,7 @@ const Settings = () => {
                 )}
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                Required for all FastWAPI operations
+                Required for all WhatsApp operations (get from FastWAPI dashboard)
               </p>
             </div>
           </div>
@@ -196,7 +205,7 @@ const Settings = () => {
               className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <Save className="h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Settings'}
+              {saving ? 'Saving...' : 'Save Configuration'}
             </button>
             
             <button
@@ -212,27 +221,9 @@ const Settings = () => {
           {!settings.backendToken && (
             <p className="text-amber-600 text-sm mt-2 flex items-center gap-1">
               <XCircle className="h-4 w-4" />
-              Backend token is required for all operations
+              API token is required for all WhatsApp operations
             </p>
           )}
-        </div>
-
-        {/* Connection Status */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Connection Status</h3>
-          <div className={`p-4 rounded-lg border ${connectionStatus.fastwapi ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-            <div className="flex items-center">
-              {connectionStatus.fastwapi ? (
-                <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
-              ) : (
-                <XCircle className="h-5 w-5 text-red-600 mr-2" />
-              )}
-              <span className={`text-sm font-medium ${connectionStatus.fastwapi ? 'text-green-800' : 'text-red-800'}`}>FastWAPI</span>
-            </div>
-            <p className={`text-xs mt-1 ${connectionStatus.fastwapi ? 'text-green-600' : 'text-red-600'}`}>
-              {connectionStatus.fastwapi ? 'Token configured' : 'No token configured'}
-            </p>
-          </div>
         </div>
       </div>
     </div>
