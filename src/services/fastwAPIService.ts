@@ -50,6 +50,108 @@ class FastWAPIService {
     }
   }
 
+  async getConversations() {
+    console.log('💬 Getting conversations from FastWAPI...');
+
+    try {
+      const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getConversations/none?from=web_api`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({})
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Get conversations error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Conversations received:', data);
+
+      // Transform to our chat format
+      const conversations = data.conversations?.map((conv: any) => ({
+        id: conv.phone || conv.id,
+        name: conv.name || conv.phone,
+        phone: conv.phone,
+        lastMessage: conv.lastMessage || '',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        unread: 0,
+        avatar: (conv.name || conv.phone).split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+        online: false
+      })) || [];
+
+      return conversations;
+    } catch (error: any) {
+      console.error('❌ Get conversations error:', error);
+      throw new Error(`Failed to get conversations: ${error.message}`);
+    }
+  }
+
+  async getChatMessages(phoneNumber: string) {
+    console.log('📨 Getting chat messages from FastWAPI for:', phoneNumber);
+
+    try {
+      const response = await fetch(`${this.getBaseUrl()}/api/wpbox/getMessages/${phoneNumber}`, {
+        method: 'GET',
+        headers: this.getHeaders()
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Get messages error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Messages received:', data);
+
+      // Transform to our message format
+      const messages = data.messages?.map((msg: any) => ({
+        id: msg.id || Date.now() + Math.random(),
+        from: msg.from || phoneNumber,
+        to: msg.to || 'business',
+        text: msg.text || msg.message || '',
+        timestamp: msg.timestamp || msg.created_at || new Date().toISOString(),
+        type: msg.type || 'received',
+        status: msg.status || 'delivered'
+      })) || [];
+
+      return messages;
+    } catch (error: any) {
+      console.error('❌ Get messages error:', error);
+      throw new Error(`Failed to get messages: ${error.message}`);
+    }
+  }
+
+  async syncAllData() {
+    console.log('🔄 Syncing all data from FastWAPI...');
+
+    try {
+      const [conversations, templates] = await Promise.all([
+        this.getConversations(),
+        this.getTemplates()
+      ]);
+
+      // Get messages for each conversation
+      const messagesPromises = conversations.map((conv: any) => 
+        this.getChatMessages(conv.phone).catch(() => [])
+      );
+      const allMessages = await Promise.all(messagesPromises);
+      const flatMessages = allMessages.flat();
+
+      console.log('✅ All data synced from FastWAPI');
+      return {
+        messages: flatMessages,
+        chats: conversations,
+        templates: templates
+      };
+    } catch (error: any) {
+      console.error('❌ Sync all data error:', error);
+      throw new Error(`Failed to sync all data: ${error.message}`);
+    }
+  }
+
   async getTemplates() {
     console.log('📋 Getting templates from FastWAPI...');
 

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Save, TestTube, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Save, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { whatsappService } from '../services/whatsappService';
 import { databaseService } from '../services/databaseService';
@@ -63,11 +63,12 @@ const Settings = () => {
         return;
       }
       
-      // Save settings
+      // Get current full settings and update only the backend fields
+      const currentSettings = databaseService.getSettings();
       const fullSettings = {
-        ...settings,
-        // Set default URL if not provided
-        backendUrl: settings.backendUrl || 'https://fastwapi.com'
+        ...currentSettings,
+        backendUrl: settings.backendUrl || 'https://fastwapi.com',
+        backendToken: settings.backendToken
       };
       
       await databaseService.saveSettings(fullSettings);
@@ -75,7 +76,7 @@ const Settings = () => {
       // Update connection status
       setConnectionStatus(prev => ({
         ...prev,
-        fastwapi: !!(fullSettings.backendToken)
+        fastwapi: !!(settings.backendToken)
       }));
       
       toast.success('Settings saved successfully!');
