@@ -40,7 +40,7 @@ class FastWAPIService {
   async loginUser(email: string, password: string) {
     try {
       console.log('Making login request to FastWAPI...');
-      const response = await fetch(`${this.baseUrl}/client/auth/gettoken`, {
+      const response = await fetch(`${this.baseUrl}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
