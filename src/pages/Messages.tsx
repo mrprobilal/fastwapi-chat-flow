@@ -28,6 +28,39 @@ const Messages = () => {
     return digits.startsWith('1') ? `+${digits}` : `+${digits}`;
   };
 
+  // Helper function to find existing chat
+  const findExistingChat = (phone) => {
+    const normalizedPhone = normalizePhoneNumber(phone);
+    return chats.find(chat => 
+      normalizePhoneNumber(chat.phone) === normalizedPhone || 
+      chat.id === phone || 
+      chat.id === normalizedPhone
+    );
+  };
+
+  // Helper function to add or update chat
+  const addOrUpdateChat = (chatData) => {
+    setChats(prev => {
+      const existingIndex = prev.findIndex(chat => 
+        chat.id === chatData.id || 
+        normalizePhoneNumber(chat.phone) === normalizePhoneNumber(chatData.phone)
+      );
+      
+      if (existingIndex !== -1) {
+        // Update existing chat
+        const updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], ...chatData };
+        localStorage.setItem('whatsapp-chats', JSON.stringify(updated));
+        return updated;
+      } else {
+        // Add new chat
+        const updated = [chatData, ...prev];
+        localStorage.setItem('whatsapp-chats', JSON.stringify(updated));
+        return updated;
+      }
+    });
+  };
+
   // Helper function to format conversations from API response
   const formatConversations = (apiConversations) => {
     if (!apiConversations || !Array.isArray(apiConversations)) {
@@ -214,7 +247,7 @@ const Messages = () => {
         setSelectedChat(newChat.id);
       }
     }
-  }, [location.state]);
+  }, [location.state, chats]);
 
   // Enhanced message receiving with better debugging
   useEffect(() => {
