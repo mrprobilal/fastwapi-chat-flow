@@ -150,6 +150,18 @@ class WhatsAppService {
     }
   }
 
+  async getConversations() {
+    try {
+      // Use the new FastWAPI endpoint to get conversations
+      const conversations = await fastwapiService.getWhatsAppConversations();
+      console.log('Conversations fetched from FastWAPI:', conversations);
+      return conversations;
+    } catch (error) {
+      console.error('Failed to get conversations from FastWAPI:', error);
+      throw error;
+    }
+  }
+
   private getSettings() {
     try {
       return JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');

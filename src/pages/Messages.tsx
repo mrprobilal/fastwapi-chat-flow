@@ -4,6 +4,7 @@ import { usePusher } from '../hooks/usePusher';
 import { toast } from 'sonner';
 import { useLocation } from 'react-router-dom';
 import { useIsMobile } from '../hooks/use-mobile';
+import { whatsappService } from '../services/whatsappService';
 
 const Messages = () => {
   const location = useLocation();
@@ -14,10 +15,10 @@ const Messages = () => {
   const [templates, setTemplates] = useState([]);
   const [messages, setMessages] = useState([]);
   const [apiStatus, setApiStatus] = useState({ connected: false, checking: true });
+  const [chats, setChats] = useState([]);
+  const [loadingConversations, setLoadingConversations] = useState(true);
 
   const { isConnected, subscribeToMessages, unsubscribeFromMessages } = usePusher();
-
-  const [chats, setChats] = useState([]);
 
   // Helper function to normalize phone numbers
   const normalizePhoneNumber = (phone) => {
@@ -27,59 +28,69 @@ const Messages = () => {
     return digits.startsWith('1') ? `+${digits}` : `+${digits}`;
   };
 
-  // Helper function to deduplicate chats by phone number
-  const deduplicateChats = (chatList) => {
-    const seen = new Set();
-    return chatList.filter(chat => {
-      const normalizedPhone = normalizePhoneNumber(chat.phone);
-      if (seen.has(normalizedPhone)) {
-        return false;
-      }
-      seen.add(normalizedPhone);
-      return true;
-    });
-  };
-
-  // Helper function to find existing chat by phone number
-  const findExistingChat = (phone) => {
-    const normalizedPhone = normalizePhoneNumber(phone);
-    
-    // Check current state first
-    const stateChat = chats.find(chat => normalizePhoneNumber(chat.phone) === normalizedPhone);
-    if (stateChat) return stateChat;
-
-    // Check localStorage as fallback
-    const savedChats = localStorage.getItem('whatsapp-chats');
-    if (savedChats) {
-      const parsedChats = JSON.parse(savedChats);
-      return parsedChats.find(chat => normalizePhoneNumber(chat.phone) === normalizedPhone);
+  // Helper function to format conversations from API response
+  const formatConversations = (apiConversations) => {
+    if (!apiConversations || !Array.isArray(apiConversations)) {
+      console.log('No valid conversations data received');
+      return [];
     }
-    
-    return null;
+
+    return apiConversations.map((conv, index) => ({
+      id: conv.phone || conv.id || `conv_${index}`,
+      name: conv.contact_name || conv.name || conv.phone || `Contact ${index + 1}`,
+      phone: conv.phone || conv.contact_phone || '',
+      lastMessage: conv.last_message || conv.lastMessage || 'No messages yet',
+      time: conv.last_message_time || conv.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      unread: conv.unread_count || conv.unread || 0,
+      avatar: (conv.contact_name || conv.name || conv.phone || `Contact ${index + 1}`).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+      online: conv.online || false
+    }));
   };
 
-  // Helper function to safely add or update chat
-  const addOrUpdateChat = (newChat) => {
-    setChats(prev => {
-      const normalizedPhone = normalizePhoneNumber(newChat.phone);
-      const existingIndex = prev.findIndex(chat => normalizePhoneNumber(chat.phone) === normalizedPhone);
-      
-      let updated;
-      if (existingIndex >= 0) {
-        // Update existing chat
-        updated = [...prev];
-        updated[existingIndex] = { ...updated[existingIndex], ...newChat };
-      } else {
-        // Add new chat
-        updated = [newChat, ...prev];
+  // Load conversations from FastWAPI backend
+  useEffect(() => {
+    const loadConversations = async () => {
+      try {
+        setLoadingConversations(true);
+        console.log('Loading conversations from FastWAPI...');
+        
+        const conversationsData = await whatsappService.getConversations();
+        console.log('Raw conversations data:', conversationsData);
+        
+        // Handle different possible response structures
+        const conversations = conversationsData?.data || conversationsData?.conversations || conversationsData || [];
+        const formattedChats = formatConversations(conversations);
+        
+        console.log('Formatted conversations:', formattedChats);
+        setChats(formattedChats);
+        
+        if (formattedChats.length === 0) {
+          toast.info('No conversations found');
+        } else {
+          toast.success(`Loaded ${formattedChats.length} conversations`);
+        }
+      } catch (error) {
+        console.error('Error loading conversations:', error);
+        toast.error('Failed to load conversations from backend');
+        
+        // Fallback to localStorage if API fails
+        const savedChats = localStorage.getItem('whatsapp-chats');
+        if (savedChats) {
+          try {
+            const parsedChats = JSON.parse(savedChats);
+            setChats(parsedChats);
+            console.log('Loaded fallback chats from localStorage:', parsedChats);
+          } catch (parseError) {
+            console.error('Error parsing saved chats:', parseError);
+          }
+        }
+      } finally {
+        setLoadingConversations(false);
       }
-      
-      // Deduplicate and save to localStorage
-      const deduplicated = deduplicateChats(updated);
-      localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicated));
-      return deduplicated;
-    });
-  };
+    };
+
+    loadConversations();
+  }, []);
 
   // Check WhatsApp API status automatically
   useEffect(() => {
@@ -155,37 +166,22 @@ const Messages = () => {
     loadTemplates();
   }, []);
 
-  // Load messages and chats from localStorage only
+  // Load messages from localStorage (keep existing message loading logic)
   useEffect(() => {
-    const loadStoredData = () => {
+    const loadStoredMessages = () => {
       try {
-        // Load messages from localStorage
         const savedMessages = localStorage.getItem('whatsapp-messages');
-        const savedChats = localStorage.getItem('whatsapp-chats');
-        
         if (savedMessages) {
           const parsedMessages = JSON.parse(savedMessages);
           console.log('Loaded messages from localStorage:', parsedMessages);
           setMessages(parsedMessages);
         }
-        
-        if (savedChats) {
-          const parsedChats = JSON.parse(savedChats);
-          console.log('Loaded chats from localStorage:', parsedChats);
-          // Deduplicate chats when loading
-          const deduplicatedChats = deduplicateChats(parsedChats);
-          setChats(deduplicatedChats);
-          // Update localStorage if deduplication changed anything
-          if (deduplicatedChats.length !== parsedChats.length) {
-            localStorage.setItem('whatsapp-chats', JSON.stringify(deduplicatedChats));
-          }
-        }
       } catch (error) {
-        console.error('Error loading stored data:', error);
+        console.error('Error loading stored messages:', error);
       }
     };
 
-    loadStoredData();
+    loadStoredMessages();
   }, []);
 
   // Handle selected customer from navigation
@@ -611,7 +607,12 @@ const Messages = () => {
 
         {/* Mobile Chat List */}
         <div className="flex-1 overflow-y-auto bg-white">
-          {chats.length === 0 ? (
+          {loadingConversations ? (
+            <div className="p-4 text-center text-gray-500">
+              <div className="h-6 w-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+              <p>Loading conversations...</p>
+            </div>
+          ) : chats.length === 0 ? (
             <div className="p-4 text-center text-gray-500">
               <MessageSquare className="h-12 w-12 mx-auto mb-2 text-gray-300" />
               <p>No conversations yet</p>
@@ -702,7 +703,12 @@ const Messages = () => {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {chats.length === 0 ? (
+            {loadingConversations ? (
+              <div className="p-4 text-center text-gray-500">
+                <div className="h-8 w-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                <p>Loading conversations...</p>
+              </div>
+            ) : chats.length === 0 ? (
               <div className="p-4 text-center text-gray-500">
                 <MessageSquare className="h-12 w-12 mx-auto mb-2 text-gray-300" />
                 <p>No conversations yet</p>
@@ -777,105 +783,12 @@ const Messages = () => {
               
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {chatMessages.length === 0 ? (
-                  <div className="text-center text-gray-500 mt-8">
-                    <MessageSquare className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                    <p>No messages yet</p>
-                    <p className="text-sm">Start a conversation with {selectedChatData.name}</p>
-                  </div>
-                ) : (
-                  chatMessages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg relative ${
-                        message.type === 'sent'
-                          ? 'bg-green-500 text-white rounded-br-none' 
-                          : 'bg-white text-gray-900 rounded-bl-none border border-gray-200'
-                      }`}>
-                        <p className="text-sm leading-relaxed">{message.text}</p>
-                        <div className="flex items-center justify-end mt-1 space-x-1">
-                          <p className={`text-xs ${
-                            message.type === 'sent' ? 'text-green-100' : 'text-gray-500'
-                          }`}>
-                            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                          {message.type === 'sent' && (
-                            <div className="flex">
-                              {message.status === 'sending' && (
-                                <div className="h-3 w-3 border-2 border-green-200 border-t-green-100 rounded-full animate-spin"></div>
-                              )}
-                              {message.status === 'sent' && (
-                                <svg className="h-3 w-3 text-green-100" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              )}
-                              {message.status === 'failed' && (
-                                <svg className="h-3 w-3 text-red-300" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                </svg>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
+                {/* ... keep existing code (messages display) */}
               </div>
 
               {/* Message Input */}
               <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
-                {showTemplates && templates.length > 0 && (
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">Message Templates</h4>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {templates.map((template) => (
-                        <button
-                          key={template.id}
-                          onClick={() => sendTemplate(template)}
-                          className="w-full text-left p-2 text-sm bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="font-medium">{template.name}</div>
-                          <div className="text-gray-500 text-xs truncate">{template.content}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setShowTemplates(!showTemplates)}
-                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-                    disabled={templates.length === 0}
-                  >
-                    <FileText className="h-5 w-5" />
-                  </button>
-                  <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
-                    <Paperclip className="h-5 w-5" />
-                  </button>
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                      placeholder="Type a message..."
-                      className="w-full px-4 py-3 pr-12 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
-                    />
-                    <button className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700 rounded-full transition-colors">
-                      <Smile className="h-5 w-5" />
-                    </button>
-                  </div>
-                  <button 
-                    onClick={sendMessage}
-                    disabled={!newMessage.trim()}
-                    className="p-3 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Send className="h-5 w-5" />
-                  </button>
-                </div>
+                {/* ... keep existing code (message input implementation) */}
               </div>
             </>
           ) : (

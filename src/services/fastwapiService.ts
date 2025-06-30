@@ -164,6 +164,28 @@ class FastWAPIService {
     }
   }
 
+  async getWhatsAppConversations() {
+    try {
+      const response = await fetch('https://fastwapi.com/api/wpbox/getConversations/none?from=mobile_api');
+      
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error(`GetConversations endpoint returned HTML (status ${response.status}). The API endpoint may not exist.`);
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to get conversations with status ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Conversations fetched from FastWAPI:', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching WhatsApp conversations from FastWAPI:', error);
+      throw error;
+    }
+  }
+
   async sendWhatsAppMessage(phoneNumber: string, message: string) {
     try {
       return this.makeRequest('whatsapp/send', {
