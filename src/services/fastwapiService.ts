@@ -1,4 +1,3 @@
-
 class FastWAPIService {
   private baseUrl = 'https://fastwapi.com/api/v2';
 
@@ -144,14 +143,9 @@ class FastWAPIService {
   // WhatsApp messaging integration
   async getWhatsAppMessages() {
     try {
-      // Get WhatsApp Business API access token from settings
-      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
-      const accessToken = settings.accessToken;
+      // Use the specific access token provided
+      const accessToken = 'EAAHVZB3DsWcYBOZC2fbWD9IrOXmDkcgvW3VsuOcAfqMimuLoVlYx9ifd6oHhGeThyitoehNprNhGdAxcxK7lDqw8b9YmjUQmojfK8D2A9E4i8ZB1IMpFpK548xEIOukkVfD64ZClEjXRLsnWRmISZAjAf9nSmzBZA4A1pqw8JN6wrPNZBSAWyRZAsGVqdRQz8rrRojeQZAbrkp2jeP43YIOHTiHtyjemphndsHbjenMWBmzUclAZDZD';
       
-      if (!accessToken) {
-        throw new Error('WhatsApp Business API access token not found in settings');
-      }
-
       const response = await fetch(`${this.baseUrl}/api/wpbox/getMessages?api_token=${accessToken}`);
       
       const contentType = response.headers.get('content-type');
