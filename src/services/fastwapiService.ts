@@ -1,3 +1,4 @@
+
 class FastWAPIService {
   private baseUrl = 'https://fastwapi.com/api/v2';
 
@@ -166,9 +167,9 @@ class FastWAPIService {
 
   async getWhatsAppConversations() {
     try {
-      // Use the exact endpoint URL provided by the user
+      // Use POST method as required by the endpoint
       const response = await fetch('https://fastwapi.com/api/wpbox/getConversations/none?from=mobile_api', {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         }
