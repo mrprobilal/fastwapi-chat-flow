@@ -166,7 +166,13 @@ class FastWAPIService {
 
   async getWhatsAppConversations() {
     try {
-      const response = await fetch('https://fastwapi.com/api/wpbox/getConversations/none?from=mobile_api');
+      // Use the exact endpoint URL provided by the user
+      const response = await fetch('https://fastwapi.com/api/wpbox/getConversations/none?from=mobile_api', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
       
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('text/html')) {
