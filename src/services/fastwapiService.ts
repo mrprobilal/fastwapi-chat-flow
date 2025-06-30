@@ -144,9 +144,28 @@ class FastWAPIService {
   // WhatsApp messaging integration
   async getWhatsAppMessages() {
     try {
-      return this.makeRequest('whatsapp/messages');
+      // Get WhatsApp Business API access token from settings
+      const settings = JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
+      const accessToken = settings.accessToken;
+      
+      if (!accessToken) {
+        throw new Error('WhatsApp Business API access token not found in settings');
+      }
+
+      const response = await fetch(`${this.baseUrl}/api/wpbox/getMessages?api_token=${accessToken}`);
+      
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error(`GetMessages endpoint returned HTML (status ${response.status}). The API endpoint may not exist.`);
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to get messages with status ${response.status}: ${response.statusText}`);
+      }
+
+      return response.json();
     } catch (error) {
-      console.error('Error fetching WhatsApp messages:', error);
+      console.error('Error fetching WhatsApp messages from FastWAPI:', error);
       throw error;
     }
   }

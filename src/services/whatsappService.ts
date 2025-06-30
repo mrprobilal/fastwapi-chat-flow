@@ -140,7 +140,7 @@ class WhatsAppService {
 
   async getMessages() {
     try {
-      // Try to get messages from FastWAPI backend
+      // Use the new FastWAPI endpoint to get messages
       const messages = await fastwapiService.getWhatsAppMessages();
       console.log('Messages fetched from FastWAPI:', messages);
       return messages;
