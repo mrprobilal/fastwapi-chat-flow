@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,7 +33,8 @@ const Login = () => {
     try {
       console.log('Sending login request with:', formData);
       
-      const response = await fetch('https://fastwapi.com/api/login', {
+      // Use the FastWAPI v2 endpoint for authentication
+      const response = await fetch('https://fastwapi.com/api/v2/client/auth/gettoken', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
