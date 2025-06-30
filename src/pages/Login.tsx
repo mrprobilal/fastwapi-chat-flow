@@ -1,12 +1,14 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { LogIn, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { fastwapiService } from '@/services/fastwapiService';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ const Login = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -29,41 +32,42 @@ const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setConnectionError(false);
 
     try {
-      console.log('Sending login request with:', formData);
+      console.log('Attempting login with FastWAPI service...');
       
-      // Use the FastWAPI v2 endpoint for authentication
-      const response = await fetch('https://fastwapi.com/api/v2/client/auth/gettoken', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      const response = await fastwapiService.loginUser(formData.email, formData.password);
+      console.log('FastWAPI login response:', response);
 
-      const data = await response.json();
-      console.log('Login API response:', data);
-
-      if (response.ok && data.status === true) {
-        // Handle successful login - API returns user data directly in response
+      if (response.status === true && response.token) {
+        // Handle successful login
         const userData = {
-          id: data.id.toString(),
-          email: data.email,
-          name: data.name
+          id: response.id?.toString() || '1',
+          email: response.email || formData.email,
+          name: response.name || 'User'
         };
         
         console.log('Login successful, user data:', userData);
-        login(userData, data.token);
+        login(userData, response.token);
         toast.success('Login successful!');
         navigate('/');
       } else {
-        console.log('Login failed:', data);
-        toast.error(data.errMsg || data.message || 'Login failed');
+        console.log('Login failed:', response);
+        toast.error(response.errMsg || response.message || 'Invalid credentials');
       }
     } catch (error) {
       console.error('Login error:', error);
-      toast.error('Network error. Please try again.');
+      setConnectionError(true);
+      
+      // Check if it's a network/parsing error (404, connection issues, etc.)
+      if (error instanceof Error && error.message.includes('Failed to execute \'json\'')) {
+        toast.error('FastWAPI service is not available. Please check your connection.');
+      } else if (error instanceof Error && error.message.includes('404')) {
+        toast.error('Login service not found. Please contact support.');
+      } else {
+        toast.error('Login failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -84,6 +88,21 @@ const Login = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {connectionError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <div className="text-sm text-red-700">
+                <p className="font-medium">Connection Error</p>
+                <p>Unable to connect to FastWAPI service. Please check if:</p>
+                <ul className="mt-1 list-disc list-inside text-xs">
+                  <li>Your internet connection is working</li>
+                  <li>FastWAPI service is online</li>
+                  <li>The API endpoint is configured correctly</li>
+                </ul>
+              </div>
+            </div>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
