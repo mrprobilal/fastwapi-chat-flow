@@ -1,5 +1,7 @@
+
 class FastWAPIService {
-  private baseUrl = 'https://fastwapi.com/api/v2';
+  private baseUrl = 'https://creativepixels.site/api';
+  private vendorUid = 'a5944265-83b2-4372-a6cf-01778281189b';
 
   private getAuthToken(): string {
     return localStorage.getItem('token') || '';
@@ -7,13 +9,14 @@ class FastWAPIService {
 
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
     const token = this.getAuthToken();
-    const url = `${this.baseUrl}/${endpoint}${endpoint.includes('?') ? '&' : '?'}api_token=${token}`;
+    const url = `${this.baseUrl}/${this.vendorUid}/${endpoint}?token=${token}`;
     
     try {
       const response = await fetch(url, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
           ...options.headers,
         },
       });
@@ -30,7 +33,7 @@ class FastWAPIService {
 
       return response.json();
     } catch (error) {
-      console.error(`FastWAPI request failed for ${endpoint}:`, error);
+      console.error(`Creative Pixels API request failed for ${endpoint}:`, error);
       throw error;
     }
   }
@@ -38,7 +41,7 @@ class FastWAPIService {
   // Authentication
   async loginUser(email: string, password: string) {
     try {
-      console.log('Making login request to FastWAPI...');
+      console.log('Making login request to Creative Pixels API...');
       const response = await fetch(`${this.baseUrl}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -140,17 +143,17 @@ class FastWAPIService {
     });
   }
 
-  // WhatsApp messaging integration using correct endpoints
+  // WhatsApp messaging integration using Creative Pixels API
   async sendWhatsAppMessage(phoneNumber: string, message: string) {
     try {
       const token = this.getAuthToken();
-      const response = await fetch(`${this.baseUrl}/api/wpbox/sendmessage`, {
+      const response = await fetch(`${this.baseUrl}/${this.vendorUid}/contact/send-message?token=${token}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          api_token: token,
           phone: phoneNumber,
           message: message
         }),
@@ -166,21 +169,21 @@ class FastWAPIService {
       }
 
       const data = await response.json();
-      console.log('Message sent via FastWAPI:', data);
+      console.log('Message sent via Creative Pixels API:', data);
       return data;
     } catch (error) {
-      console.error('Error sending WhatsApp message via FastWAPI:', error);
+      console.error('Error sending WhatsApp message via Creative Pixels API:', error);
       throw error;
     }
   }
 
   async getWhatsAppChatHistory(contactId: string) {
     try {
-      const response = await this.makeRequest(`api/wpbox/chat/${contactId}`);
-      console.log('Chat history fetched from FastWAPI:', response);
+      const response = await this.makeRequest(`contact/chat/${contactId}`);
+      console.log('Chat history fetched from Creative Pixels API:', response);
       return response;
     } catch (error) {
-      console.error('Error fetching chat history from FastWAPI:', error);
+      console.error('Error fetching chat history from Creative Pixels API:', error);
       throw error;
     }
   }
@@ -188,10 +191,11 @@ class FastWAPIService {
   async getWhatsAppMessages() {
     try {
       const token = this.getAuthToken();
-      const response = await fetch(`${this.baseUrl}/api/wpbox/getMessages?api_token=${token}`, {
+      const response = await fetch(`${this.baseUrl}/${this.vendorUid}/contact/messages?token=${token}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         }
       });
       
@@ -206,7 +210,7 @@ class FastWAPIService {
 
       return response.json();
     } catch (error) {
-      console.error('Error fetching WhatsApp messages from FastWAPI:', error);
+      console.error('Error fetching WhatsApp messages from Creative Pixels API:', error);
       throw error;
     }
   }
@@ -216,10 +220,11 @@ class FastWAPIService {
       const token = this.getAuthToken();
       console.log('Using token for conversations:', token ? 'Token present' : 'No token');
       
-      const response = await fetch(`${this.baseUrl}/api/wpbox/getConversations/none?api_token=${token}&from=mobile_api`, {
-        method: 'POST',
+      const response = await fetch(`${this.baseUrl}/${this.vendorUid}/contact/conversations?token=${token}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         }
       });
       
@@ -233,7 +238,7 @@ class FastWAPIService {
       }
 
       const data = await response.json();
-      console.log('Conversations fetched from FastWAPI:', data);
+      console.log('Conversations fetched from Creative Pixels API:', data);
       
       // Check if the response indicates an error
       if (data.status === 'error') {
@@ -242,14 +247,14 @@ class FastWAPIService {
       
       return data;
     } catch (error) {
-      console.error('Error fetching WhatsApp conversations from FastWAPI:', error);
+      console.error('Error fetching WhatsApp conversations from Creative Pixels API:', error);
       throw error;
     }
   }
 
   async getWhatsAppTemplates() {
     try {
-      return this.makeRequest('whatsapp/templates');
+      return this.makeRequest('contact/templates');
     } catch (error) {
       console.error('Error fetching WhatsApp templates:', error);
       throw error;
