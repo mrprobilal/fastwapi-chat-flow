@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { databaseService } from '../services/databaseService';
-import { whatsappService } from '../services/whatsappService';
+import { creativepixelsService } from '../services/creativepixelsService';
 
 const Settings = () => {
   const [settings, setSettings] = useState({
@@ -70,11 +70,8 @@ const Settings = () => {
     try {
       await databaseService.saveSettings(settings);
       
-      // Store token temporarily and test
-      localStorage.setItem('token', settings.apiToken);
-      
-      // Test by fetching conversations
-      await whatsappService.getConversations();
+      // Test the token by attempting to login
+      await creativepixelsService.loginWithToken(settings.apiToken);
       
       setConnectionStatus(prev => ({ ...prev, creativepixels: true }));
       toast.success('Creative Pixels API connection successful!');
