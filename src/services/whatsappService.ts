@@ -23,6 +23,10 @@ class WhatsAppService {
 
       if (!response.ok) {
         const errorData = await response.json();
+        // Check if token is expired
+        if (errorData.error?.code === 190) {
+          throw new Error('WhatsApp access token has expired. Please update your token in Settings.');
+        }
         throw new Error(errorData.error?.message || `HTTP ${response.status}`);
       }
 
@@ -126,6 +130,10 @@ class WhatsAppService {
 
         if (!response.ok) {
           const errorData = await response.json();
+          if (errorData.error?.code === 190) {
+            toast.error('WhatsApp access token expired. Please update in Settings.');
+            throw new Error('WhatsApp access token has expired');
+          }
           throw new Error(errorData.error?.message || `HTTP ${response.status}`);
         }
 

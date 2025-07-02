@@ -187,10 +187,13 @@ class FastWAPIService {
 
   async getWhatsAppMessages() {
     try {
-      // Use the specific access token provided
-      const accessToken = 'EAAHVZB3DsWcYBOZC2fbWD9IrOXmDkcgvW3VsuOcAfqMimuLoVlYx9ifd6oHhGeThyitoehNprNhGdAxcxK7lDqw8b9YmjUQmojfK8D2A9E4i8ZB1IMpFpK548xEIOukkVfD64ZClEjXRLsnWRmISZAjAf9nSmzBZA4A1pqw8JN6wrPNZBSAWyRZAsGVqdRQz8rrRojeQZAbrkp2jeP43YIOHTiHtyjemphndsHbjenMWBmzUclAZDZD';
-      
-      const response = await fetch(`${this.baseUrl}/api/wpbox/getMessages?api_token=${accessToken}`);
+      const token = this.getAuthToken();
+      const response = await fetch(`${this.baseUrl}/api/wpbox/getMessages?api_token=${token}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
       
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('text/html')) {
@@ -210,8 +213,10 @@ class FastWAPIService {
 
   async getWhatsAppConversations() {
     try {
-      // Use POST method as required by the endpoint
-      const response = await fetch('https://fastwapi.com/api/wpbox/getConversations/none?from=mobile_api', {
+      const token = this.getAuthToken();
+      console.log('Using token for conversations:', token ? 'Token present' : 'No token');
+      
+      const response = await fetch(`${this.baseUrl}/api/wpbox/getConversations/none?api_token=${token}&from=mobile_api`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -229,6 +234,12 @@ class FastWAPIService {
 
       const data = await response.json();
       console.log('Conversations fetched from FastWAPI:', data);
+      
+      // Check if the response indicates an error
+      if (data.status === 'error') {
+        throw new Error(data.message || 'Unknown error from conversations API');
+      }
+      
       return data;
     } catch (error) {
       console.error('Error fetching WhatsApp conversations from FastWAPI:', error);
