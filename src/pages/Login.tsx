@@ -5,68 +5,59 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { LogIn, Eye, EyeOff, AlertCircle, Key } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { fastwapiService } from '@/services/fastwapiService';
+import { creativepixelsService } from '@/services/creativepixelsService';
 
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
-  const [showPassword, setShowPassword] = useState(false);
+  const [apiToken, setApiToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setConnectionError(false);
 
+    if (!apiToken.trim()) {
+      toast.error('Please enter your API Access Token');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      console.log('Attempting login with FastWAPI service...');
+      console.log('Attempting login with Creative Pixels API token...');
       
-      const response = await fastwapiService.loginUser(formData.email, formData.password);
-      console.log('FastWAPI login response:', response);
+      const response = await creativepixelsService.loginWithToken(apiToken.trim());
+      console.log('Creative Pixels login response:', response);
 
       if (response.status === true && response.token) {
-        // Handle successful login
         const userData = {
-          id: response.id?.toString() || '1',
-          email: response.email || formData.email,
-          name: response.name || 'User'
+          id: '1',
+          email: 'user@creativepixels.site',
+          name: 'Creative Pixels User'
         };
         
         console.log('Login successful, user data:', userData);
         login(userData, response.token);
-        toast.success('Login successful!');
+        toast.success('Authentication successful!');
         navigate('/');
       } else {
         console.log('Login failed:', response);
-        toast.error(response.errMsg || response.message || 'Invalid credentials');
+        toast.error(response.message || 'Authentication failed');
       }
     } catch (error) {
       console.error('Login error:', error);
       setConnectionError(true);
       
-      // Check if it's a network/parsing error (404, connection issues, etc.)
-      if (error instanceof Error && error.message.includes('Failed to execute \'json\'')) {
-        toast.error('FastWAPI service is not available. Please check your connection.');
-      } else if (error instanceof Error && error.message.includes('404')) {
-        toast.error('Login service not found. Please contact support.');
+      if (error instanceof Error) {
+        toast.error(error.message);
       } else {
-        toast.error('Login failed. Please try again.');
+        toast.error('Authentication failed. Please check your API token.');
       }
     } finally {
       setIsLoading(false);
@@ -74,17 +65,17 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-green-100 rounded-full">
-              <LogIn className="h-8 w-8 text-green-600" />
+            <div className="p-3 bg-blue-100 rounded-full">
+              <Key className="h-8 w-8 text-blue-600" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold text-green-600">FastWAPI</CardTitle>
+          <CardTitle className="text-2xl font-bold text-blue-600">Creative Pixels</CardTitle>
           <CardDescription>
-            Sign in to your account to access WhatsApp Business API
+            Enter your API Access Token to connect to Creative Pixels
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -92,86 +83,59 @@ const Login = () => {
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
               <AlertCircle className="h-4 w-4 text-red-500" />
               <div className="text-sm text-red-700">
-                <p className="font-medium">Connection Error</p>
-                <p>Unable to connect to FastWAPI service. Please check if:</p>
-                <ul className="mt-1 list-disc list-inside text-xs">
-                  <li>Your internet connection is working</li>
-                  <li>FastWAPI service is online</li>
-                  <li>The API endpoint is configured correctly</li>
-                </ul>
+                <p className="font-medium">Authentication Failed</p>
+                <p>Please check your API Access Token and try again.</p>
               </div>
             </div>
           )}
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="Enter your email"
-                value={formData.email}
-                onChange={handleInputChange}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="apiToken">API Access Token</Label>
               <div className="relative">
                 <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
-                  value={formData.password}
-                  onChange={handleInputChange}
+                  id="apiToken"
+                  name="apiToken"
+                  type={showToken ? 'text' : 'password'}
+                  placeholder="Enter your Creative Pixels API token"
+                  value={apiToken}
+                  onChange={(e) => setApiToken(e.target.value)}
                   required
                   disabled={isLoading}
                   className="pr-10"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowToken(!showToken)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   disabled={isLoading}
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                You can find your API token in your Creative Pixels dashboard
+              </p>
             </div>
 
             <Button 
               type="submit" 
-              className="w-full bg-green-600 hover:bg-green-700"
+              className="w-full bg-blue-600 hover:bg-blue-700"
               disabled={isLoading}
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? 'Authenticating...' : 'Connect'}
             </Button>
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-600">
-            <p>Don't have an account?</p>
+            <p>Need an API token?</p>
             <a 
-              href="https://fastwapi.com/register" 
+              href="https://creativepixels.site" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-green-600 hover:text-green-700 font-medium"
+              className="text-blue-600 hover:text-blue-700 font-medium"
             >
-              Register on FastWAPI.com
-            </a>
-          </div>
-
-          <div className="mt-4 text-center text-sm text-gray-500">
-            <a 
-              href="https://fastwapi.com/forgot-password" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="hover:text-green-600"
-            >
-              Forgot your password?
+              Visit Creative Pixels
             </a>
           </div>
         </CardContent>

@@ -1,15 +1,13 @@
 
 import { toast } from 'sonner';
 
-// Database service for settings and data management
 class DatabaseService {
   private settings: any = null;
   private settingsCallbacks: Array<(settings: any) => void> = [];
 
   async initializeSettings() {
     try {
-      // Load from localStorage as fallback
-      const localSettings = localStorage.getItem('fastwapi-settings');
+      const localSettings = localStorage.getItem('creativepixels-settings');
       if (localSettings) {
         this.settings = JSON.parse(localSettings);
         this.notifySettingsChange();
@@ -21,8 +19,7 @@ class DatabaseService {
 
   async saveSettings(newSettings: any) {
     try {
-      // Save to localStorage (will be replaced with Supabase later)
-      localStorage.setItem('fastwapi-settings', JSON.stringify(newSettings));
+      localStorage.setItem('creativepixels-settings', JSON.stringify(newSettings));
       this.settings = newSettings;
       this.notifySettingsChange();
       
@@ -41,7 +38,6 @@ class DatabaseService {
   onSettingsChange(callback: (settings: any) => void) {
     this.settingsCallbacks.push(callback);
     
-    // Return cleanup function
     return () => {
       this.settingsCallbacks = this.settingsCallbacks.filter(cb => cb !== callback);
     };
@@ -53,12 +49,10 @@ class DatabaseService {
     });
   }
 
-  // Get last sync time
   getLastSyncTime() {
     return this.settings?.lastSyncTime || null;
   }
 
-  // Check if settings are synced from fastwapi.com
   isSynced() {
     return !!(this.settings?.lastSyncTime);
   }

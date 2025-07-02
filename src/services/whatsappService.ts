@@ -1,94 +1,15 @@
 
-import { fastwapiService } from './fastwapiService';
+import { creativepixelsService } from './creativepixelsService';
 import { toast } from 'sonner';
 
 class WhatsAppService {
-  private baseUrl = 'https://graph.facebook.com/v18.0';
-
-  async testConnection() {
-    const settings = this.getSettings();
-    
-    if (!settings?.accessToken || !settings?.businessId) {
-      throw new Error('WhatsApp API settings not configured');
-    }
-
-    try {
-      const response = await fetch(`${this.baseUrl}/${settings.businessId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${settings.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        // Check if token is expired
-        if (errorData.error?.code === 190) {
-          throw new Error('WhatsApp access token has expired. Please update your token in Settings.');
-        }
-        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('WhatsApp connection successful:', data);
-      return data;
-    } catch (error) {
-      console.error('WhatsApp connection test failed:', error);
-      throw error;
-    }
-  }
-
   async syncTemplates() {
     try {
-      // First try to get templates from FastWAPI backend
-      const fastwapiTemplates = await fastwapiService.getWhatsAppTemplates();
-      if (fastwapiTemplates && fastwapiTemplates.data) {
-        localStorage.setItem('whatsapp-templates', JSON.stringify(fastwapiTemplates.data));
-        return fastwapiTemplates.data;
+      const creativepixelsTemplates = await creativepixelsService.getWhatsAppTemplates();
+      if (creativepixelsTemplates && creativepixelsTemplates.data) {
+        localStorage.setItem('whatsapp-templates', JSON.stringify(creativepixelsTemplates.data));
+        return creativepixelsTemplates.data;
       }
-    } catch (error) {
-      console.log('Failed to get templates from FastWAPI, trying direct API:', error);
-    }
-
-    // Fallback to direct API call
-    const settings = this.getSettings();
-    
-    if (!settings?.accessToken || !settings?.businessId) {
-      throw new Error('WhatsApp API settings not configured');
-    }
-
-    try {
-      const response = await fetch(`${this.baseUrl}/${settings.businessId}/message_templates`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${settings.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Templates synced:', data);
-      
-      if (data.data && data.data.length > 0) {
-        const syncedTemplates = data.data.map((template: any) => ({
-          id: template.id,
-          name: template.name,
-          category: template.category || 'Utility',
-          status: template.status || 'Approved',
-          content: template.components?.find((c: any) => c.type === 'BODY')?.text || 'Template content',
-          variables: template.components?.find((c: any) => c.type === 'BODY')?.example?.body_text?.[0] || []
-        }));
-        
-        localStorage.setItem('whatsapp-templates', JSON.stringify(syncedTemplates));
-        return syncedTemplates;
-      }
-      
       return [];
     } catch (error) {
       console.error('Template sync failed:', error);
@@ -98,99 +19,47 @@ class WhatsAppService {
 
   async sendMessage(phoneNumber: string, message: string) {
     try {
-      // Use the correct FastWAPI endpoint for sending messages
-      const result = await fastwapiService.sendWhatsAppMessage(phoneNumber, message);
-      console.log('Message sent via FastWAPI:', result);
+      const result = await creativepixelsService.sendWhatsAppMessage(phoneNumber, message);
+      console.log('Message sent via Creative Pixels:', result);
       toast.success('Message sent successfully!');
       return result;
     } catch (error) {
-      console.log('Failed to send via FastWAPI, trying direct API:', error);
-      
-      // Fallback to direct API call
-      const settings = this.getSettings();
-      
-      if (!settings?.accessToken || !settings?.phoneNumberId) {
-        throw new Error('WhatsApp API settings not configured');
-      }
-
-      try {
-        const response = await fetch(`${this.baseUrl}/${settings.phoneNumberId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${settings.accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: phoneNumber,
-            type: 'text',
-            text: { body: message }
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          if (errorData.error?.code === 190) {
-            toast.error('WhatsApp access token expired. Please update in Settings.');
-            throw new Error('WhatsApp access token has expired');
-          }
-          throw new Error(errorData.error?.message || `HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log('Message sent successfully:', data);
-        toast.success('Message sent successfully!');
-        return data;
-      } catch (error) {
-        console.error('Failed to send message:', error);
-        toast.error('Failed to send message');
-        throw error;
-      }
+      console.error('Failed to send message:', error);
+      toast.error('Failed to send message');
+      throw error;
     }
   }
 
   async getMessages() {
     try {
-      // Use the FastWAPI endpoint to get messages
-      const messages = await fastwapiService.getWhatsAppMessages();
-      console.log('Messages fetched from FastWAPI:', messages);
+      const messages = await creativepixelsService.getWhatsAppMessages();
+      console.log('Messages fetched from Creative Pixels:', messages);
       return messages;
     } catch (error) {
-      console.error('Failed to get messages from FastWAPI:', error);
+      console.error('Failed to get messages from Creative Pixels:', error);
       throw error;
     }
   }
 
   async getConversations() {
     try {
-      // Use the FastWAPI endpoint to get conversations
-      const conversations = await fastwapiService.getWhatsAppConversations();
-      console.log('Conversations fetched from FastWAPI:', conversations);
+      const conversations = await creativepixelsService.getWhatsAppConversations();
+      console.log('Conversations fetched from Creative Pixels:', conversations);
       return conversations;
     } catch (error) {
-      console.error('Failed to get conversations from FastWAPI:', error);
+      console.error('Failed to get conversations from Creative Pixels:', error);
       throw error;
     }
   }
 
   async getChatHistory(contactId: string) {
     try {
-      // Use the new FastWAPI endpoint to get chat history
-      const chatHistory = await fastwapiService.getWhatsAppChatHistory(contactId);
-      console.log('Chat history fetched from FastWAPI:', chatHistory);
+      const chatHistory = await creativepixelsService.getWhatsAppChatHistory(contactId);
+      console.log('Chat history fetched from Creative Pixels:', chatHistory);
       return chatHistory;
     } catch (error) {
-      console.error('Failed to get chat history from FastWAPI:', error);
+      console.error('Failed to get chat history from Creative Pixels:', error);
       throw error;
-    }
-  }
-
-  private getSettings() {
-    try {
-      return JSON.parse(localStorage.getItem('fastwapi-settings') || '{}');
-    } catch (error) {
-      console.error('Error parsing settings:', error);
-      return {};
     }
   }
 }
