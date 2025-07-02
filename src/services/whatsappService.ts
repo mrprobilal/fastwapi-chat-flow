@@ -94,9 +94,10 @@ class WhatsAppService {
 
   async sendMessage(phoneNumber: string, message: string) {
     try {
-      // First try to send via FastWAPI backend
+      // Use the correct FastWAPI endpoint for sending messages
       const result = await fastwapiService.sendWhatsAppMessage(phoneNumber, message);
       console.log('Message sent via FastWAPI:', result);
+      toast.success('Message sent successfully!');
       return result;
     } catch (error) {
       console.log('Failed to send via FastWAPI, trying direct API:', error);
@@ -130,9 +131,11 @@ class WhatsAppService {
 
         const data = await response.json();
         console.log('Message sent successfully:', data);
+        toast.success('Message sent successfully!');
         return data;
       } catch (error) {
         console.error('Failed to send message:', error);
+        toast.error('Failed to send message');
         throw error;
       }
     }
@@ -140,7 +143,7 @@ class WhatsAppService {
 
   async getMessages() {
     try {
-      // Use the new FastWAPI endpoint to get messages
+      // Use the FastWAPI endpoint to get messages
       const messages = await fastwapiService.getWhatsAppMessages();
       console.log('Messages fetched from FastWAPI:', messages);
       return messages;
@@ -152,12 +155,24 @@ class WhatsAppService {
 
   async getConversations() {
     try {
-      // Use the new FastWAPI endpoint to get conversations
+      // Use the FastWAPI endpoint to get conversations
       const conversations = await fastwapiService.getWhatsAppConversations();
       console.log('Conversations fetched from FastWAPI:', conversations);
       return conversations;
     } catch (error) {
       console.error('Failed to get conversations from FastWAPI:', error);
+      throw error;
+    }
+  }
+
+  async getChatHistory(contactId: string) {
+    try {
+      // Use the new FastWAPI endpoint to get chat history
+      const chatHistory = await fastwapiService.getWhatsAppChatHistory(contactId);
+      console.log('Chat history fetched from FastWAPI:', chatHistory);
+      return chatHistory;
+    } catch (error) {
+      console.error('Failed to get chat history from FastWAPI:', error);
       throw error;
     }
   }

@@ -1,4 +1,3 @@
-
 class FastWAPIService {
   private baseUrl = 'https://fastwapi.com/api/v2';
 
@@ -141,7 +140,51 @@ class FastWAPIService {
     });
   }
 
-  // WhatsApp messaging integration
+  // WhatsApp messaging integration using correct endpoints
+  async sendWhatsAppMessage(phoneNumber: string, message: string) {
+    try {
+      const token = this.getAuthToken();
+      const response = await fetch(`${this.baseUrl}/api/wpbox/sendmessage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          api_token: token,
+          phone: phoneNumber,
+          message: message
+        }),
+      });
+
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error(`SendMessage endpoint returned HTML (status ${response.status}). The API endpoint may not exist.`);
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to send message with status ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Message sent via FastWAPI:', data);
+      return data;
+    } catch (error) {
+      console.error('Error sending WhatsApp message via FastWAPI:', error);
+      throw error;
+    }
+  }
+
+  async getWhatsAppChatHistory(contactId: string) {
+    try {
+      const response = await this.makeRequest(`api/wpbox/chat/${contactId}`);
+      console.log('Chat history fetched from FastWAPI:', response);
+      return response;
+    } catch (error) {
+      console.error('Error fetching chat history from FastWAPI:', error);
+      throw error;
+    }
+  }
+
   async getWhatsAppMessages() {
     try {
       // Use the specific access token provided
@@ -189,18 +232,6 @@ class FastWAPIService {
       return data;
     } catch (error) {
       console.error('Error fetching WhatsApp conversations from FastWAPI:', error);
-      throw error;
-    }
-  }
-
-  async sendWhatsAppMessage(phoneNumber: string, message: string) {
-    try {
-      return this.makeRequest('whatsapp/send', {
-        method: 'POST',
-        body: JSON.stringify({ phone: phoneNumber, message }),
-      });
-    } catch (error) {
-      console.error('Error sending WhatsApp message:', error);
       throw error;
     }
   }
